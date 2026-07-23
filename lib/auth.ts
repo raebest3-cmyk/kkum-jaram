@@ -164,6 +164,7 @@ export async function fetchChildrenProfiles(accountId: string): Promise<ChildPro
       .from('children')
       .select('*')
       .eq('account_id', accountId)
+      .order('created_at', { ascending: false })
 
     if (!error && data && data.length > 0) {
       return data.map((item: any) => ({
@@ -206,7 +207,17 @@ export async function createChildProfile(
 
   try {
     const supabase = createClient()
-    const { data, error } = await supabase
+
+    // 1. accounts 테이블 부모 계정 레코드 보장 (외래키 제약조건 방지)
+    if (accountId && !accountId.startsWith('parent-') && accountId !== 'demo-parent-uuid-001') {
+      await supabase.from('accounts').upsert({
+        id: accountId,
+        role: 'parent'
+      }, { onConflict: 'id' })
+    }
+
+    // 2. children 테이블에 데이터 삽입 (actual_job 포함 시도 ➔ 실패 시 fallback 시도)
+    let res = await supabase
       .from('children')
       .insert({
         account_id: accountId,
@@ -219,20 +230,38 @@ export async function createChildProfile(
       .select()
       .single()
 
-    if (!error && data) {
-      createdProfile = {
-        id: data.id,
-        account_id: data.account_id,
-        nickname: data.nickname,
-        grade: data.grade,
-        dream_job: data.dream_job || data.actual_job,
-        actual_job: data.actual_job || data.dream_job,
-        theme: data.theme,
-        created_at: data.created_at
-      }
+    if (res.error) {
+      // actual_job 컬럼 미존재 스키마 환경 대비 Fallback 쿼리
+      res = await supabase
+        .from('children')
+        .insert({
+          account_id: accountId,
+          nickname,
+          grade,
+          dream_job: dreamJob,
+          theme: grade <= 6 ? 'elementary' : 'teen'
+        })
+        .select()
+        .single()
     }
 
-    if (wishTitle) {
+    if (!res.error && res.data) {
+      createdProfile = {
+        id: res.data.id,
+        account_id: res.data.account_id,
+        nickname: res.data.nickname,
+        grade: res.data.grade,
+        dream_job: res.data.dream_job || res.data.actual_job || dreamJob,
+        actual_job: res.data.actual_job || res.data.dream_job || dreamJob,
+        theme: res.data.theme,
+        created_at: res.data.created_at
+      }
+    } else if (res.error) {
+      console.warn('Supabase children insert error:', res.error)
+    }
+
+    // 3. 소원상자 등록
+    if (wishTitle && createdProfile.id) {
       await supabase.from('wishes').insert({
         child_id: createdProfile.id,
         title: wishTitle,
@@ -244,14 +273,18 @@ export async function createChildProfile(
     console.warn('Children DB insert fallback:', e)
   }
 
+  // 4. 로컬스토리지 보완 동기화 (목록 최상단 추가)
   if (typeof window !== 'undefined') {
     const existing = getChildrenProfiles()
-    existing.push(createdProfile)
-    localStorage.setItem(LOCAL_STORAGE_KEY_CHILDREN, JSON.stringify(existing))
+    const isAlreadyIn = existing.some(item => item.id === createdProfile.id)
+    if (!isAlreadyIn) {
+      existing.unshift(createdProfile)
+      localStorage.setItem(LOCAL_STORAGE_KEY_CHILDREN, JSON.stringify(existing))
+    }
 
     if (wishTitle) {
       const wishes = getLocalWishes()
-      wishes.push({
+      wishes.unshift({
         id: `wish-${Date.now()}`,
         child_id: createdProfile.id,
         title: wishTitle,

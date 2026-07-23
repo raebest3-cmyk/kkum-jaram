@@ -6,6 +6,7 @@ import Navbar from '@/components/Navbar'
 import {
   getCurrentUser,
   fetchChildrenProfiles,
+  createChildProfile,
   fetchChildPoints,
   addPointsLedger,
   fetchWishes,
@@ -27,26 +28,38 @@ export default function ParentDashboardPage() {
   const [wishStatus, setWishStatus] = useState<'active' | 'achieved'>('active')
   const [childPoints, setChildPoints] = useState<number>(520)
 
+  // 자녀 프로필 추가 모달 상태
+  const [showAddChildModal, setShowAddChildModal] = useState<boolean>(false)
+  const [newNickname, setNewNickname] = useState('')
+  const [newGrade, setNewGrade] = useState<number>(3)
+  const [newDreamJob, setNewDreamJob] = useState('')
+  const [newWishTitle, setNewWishTitle] = useState('')
+  const [newWishPoints, setNewWishPoints] = useState<number>(100)
+  const [isSubmittingChild, setIsSubmittingChild] = useState<boolean>(false)
+
+  const reloadChildren = async (accountId: string) => {
+    const list = await fetchChildrenProfiles(accountId)
+    setChildren(list)
+    if (list.length > 0) {
+      const childId = list[0].id
+      const pts = await fetchChildPoints(childId)
+      setChildPoints(pts)
+
+      const wishList = await fetchWishes(childId)
+      setWishes(wishList)
+      if (wishList.length > 0 && wishList[0].status) {
+        setWishStatus(wishList[0].status as 'active' | 'achieved')
+      }
+    }
+  }
+
   useEffect(() => {
     async function loadData() {
       const u = await getCurrentUser()
       setUser(u)
 
       if (u) {
-        const list = await fetchChildrenProfiles(u.id)
-        setChildren(list)
-
-        if (list.length > 0) {
-          const childId = list[0].id
-          const pts = await fetchChildPoints(childId)
-          setChildPoints(pts)
-
-          const wishList = await fetchWishes(childId)
-          setWishes(wishList)
-          if (wishList.length > 0 && wishList[0].status) {
-            setWishStatus(wishList[0].status as 'active' | 'achieved')
-          }
-        }
+        await reloadChildren(u.id)
       }
 
       const key = getUserApiKey()
@@ -76,6 +89,45 @@ export default function ParentDashboardPage() {
     alert('🎉 소원이 성공적으로 승인되었습니다! 선물 인증샷이 가족 꿈 앨범에 보관됩니다.')
   }
 
+  // 자녀 추가 처리 핸들러 (DB 저장 & 즉시 실시간 동기화)
+  const handleAddChildSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newNickname.trim()) {
+      alert('아이의 별명을 입력해 주세요!')
+      return
+    }
+
+    setIsSubmittingChild(true)
+    try {
+      const userId = user?.id || 'demo-parent-uuid-001'
+      await createChildProfile(
+        userId,
+        newNickname.trim(),
+        newGrade,
+        newDreamJob.trim() || '꿈나무 🌟',
+        newWishTitle.trim() || '소원 선물 상자 🎁',
+        newWishPoints || 100
+      )
+
+      // 성공 시 대시보드 리로드 및 폼 초기화
+      await reloadChildren(userId)
+
+      setNewNickname('')
+      setNewGrade(3)
+      setNewDreamJob('')
+      setNewWishTitle('')
+      setNewWishPoints(100)
+      setShowAddChildModal(false)
+
+      alert('🎉 자녀 프로필이 성공적으로 저장되었습니다!')
+    } catch (err) {
+      console.error(err)
+      alert('자녀 프로필 저장 중 오류가 발생했습니다.')
+    } finally {
+      setIsSubmittingChild(false)
+    }
+  }
+
   const firstChild = children.length > 0 ? children[0] : null
   const childName = firstChild?.nickname || '수빈이'
   const dreamJob = firstChild?.dream_job || '꿈나무 🌟'
@@ -103,12 +155,13 @@ export default function ParentDashboardPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Link
-              href="/onboarding"
-              className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-400 text-[#00205b] font-black text-xs hover:scale-105 transition-transform shadow-md"
+            <button
+              onClick={() => setShowAddChildModal(true)}
+              className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-400 text-[#00205b] font-black text-xs hover:scale-105 transition-transform shadow-md flex items-center gap-1.5"
             >
-              + 아이 프로필 추가
-            </Link>
+              <span>+</span>
+              <span>아이 프로필 추가</span>
+            </button>
           </div>
         </header>
 
@@ -153,10 +206,18 @@ export default function ParentDashboardPage() {
 
           {/* 2. 등록된 자녀 프로필 세션 (동적 바인딩) */}
           <section className="bg-white rounded-3xl p-6 sm:p-7 border border-amber-200/60 shadow-xl shadow-amber-900/5 space-y-4">
-            <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
-              <span>👦👧</span>
-              <span>DB 연동된 자녀 프로필 ({children.length}명)</span>
-            </h2>
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                <span>👦👧</span>
+                <span>DB 연동된 자녀 프로필 ({children.length}명)</span>
+              </h2>
+              <button
+                onClick={() => setShowAddChildModal(true)}
+                className="text-xs font-extrabold text-amber-700 hover:text-amber-900 flex items-center gap-1 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200"
+              >
+                <span>+ 자녀 등록하기</span>
+              </button>
+            </div>
 
             {children.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -187,11 +248,14 @@ export default function ParentDashboardPage() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8 text-slate-500 text-sm font-bold">
-                등록된 자녀 프로필이 없습니다.{' '}
-                <Link href="/onboarding" className="text-amber-700 underline font-black">
-                  온보딩에서 추가하기
-                </Link>
+              <div className="text-center py-8 text-slate-500 text-sm font-bold space-y-3">
+                <p>등록된 자녀 프로필이 없습니다.</p>
+                <button
+                  onClick={() => setShowAddChildModal(true)}
+                  className="px-5 py-2 rounded-2xl bg-amber-400 text-amber-950 font-black text-xs shadow-sm hover:scale-105 transition-transform"
+                >
+                  + 지금 첫 자녀 프로필 추가하기
+                </button>
               </div>
             )}
           </section>
@@ -340,7 +404,7 @@ export default function ParentDashboardPage() {
                 </span>
               </div>
               <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                Anthropic API 키를 설정하면 Edge Function을 통해 AI 오답 분석 및 맞춤 피드백 기능이 활성화됩니다.
+                Google Gemini API 키를 설정하면 Edge Function을 통해 AI 오답 분석 및 맞춤 피드백 기능이 활성화됩니다.
               </p>
               <div className="pt-1">
                 <Link href="/onboarding" className="text-xs text-amber-700 hover:underline font-black">
@@ -351,6 +415,112 @@ export default function ParentDashboardPage() {
           </div>
         </main>
       </div>
+
+      {/* 자녀 프로필 추가 모달 */}
+      {showAddChildModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
+          <div className="w-full max-w-lg bg-[#FDFBF7] rounded-3xl border-2 border-amber-300 p-6 shadow-2xl space-y-5">
+            <div className="flex justify-between items-center border-b border-amber-200 pb-3">
+              <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                <span>👦👧</span>
+                <span>새 자녀 프로필 등록 (DB 연동)</span>
+              </h3>
+              <button
+                onClick={() => setShowAddChildModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-xs"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleAddChildSubmit} className="space-y-4 text-xs font-bold">
+              <div>
+                <label className="block text-slate-700 mb-1">
+                  아이 별명 <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="예: 민우, 준이, 꿈돌이"
+                  value={newNickname}
+                  onChange={(e) => setNewNickname(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-slate-900 font-bold focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 mb-1">학년 선택</label>
+                <select
+                  value={newGrade}
+                  onChange={(e) => setNewGrade(Number(e.target.value))}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-slate-900 font-bold focus:outline-none focus:border-amber-400"
+                >
+                  <option value={1}>초등학교 1학년</option>
+                  <option value={2}>초등학교 2학년</option>
+                  <option value={3}>초등학교 3학년</option>
+                  <option value={4}>초등학교 4학년</option>
+                  <option value={5}>초등학교 5학년</option>
+                  <option value={6}>초등학교 6학년</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 mb-1">장래희망 / 꿈 (선택)</label>
+                <input
+                  type="text"
+                  placeholder="예: 로봇 공학자, 과학자, 웹툰 작가"
+                  value={newDreamJob}
+                  onChange={(e) => setNewDreamJob(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-slate-900 font-bold focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div className="pt-2 border-t border-slate-200 space-y-3">
+                <label className="block text-amber-900 font-black">첫 도전 소원 선물 설정</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="col-span-2">
+                    <input
+                      type="text"
+                      placeholder="소원 선물 (예: 레고 블록)"
+                      value={newWishTitle}
+                      onChange={(e) => setNewWishTitle(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 text-xs font-bold"
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="number"
+                      placeholder="목표 P"
+                      min={10}
+                      max={1000}
+                      value={newWishPoints}
+                      onChange={(e) => setNewWishPoints(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 text-xs font-bold"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAddChildModal(false)}
+                  className="px-5 py-2.5 rounded-2xl bg-slate-100 text-slate-600 text-xs font-bold hover:bg-slate-200"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingChild}
+                  className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 text-amber-950 font-black text-xs shadow-md hover:scale-105 transition-transform disabled:opacity-50"
+                >
+                  {isSubmittingChild ? 'DB 저장 중...' : '🌱 자녀 프로필 DB 저장하기'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* 소원 승인 팝업 모달 */}
       {showApprovalModal && (
