@@ -25,6 +25,8 @@ export interface WishItem {
   target_points: number
   status?: string
   proof_image_path?: string
+  parent_message?: string
+  redemption_type?: string
   achieved_at?: string
 }
 
@@ -489,6 +491,89 @@ export async function fetchWishes(childId: string): Promise<WishItem[]> {
   }
 
   return getLocalWishes()
+}
+
+export async function fetchAchievedWishes(childId: string): Promise<WishItem[]> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('wishes')
+      .select('*')
+      .eq('child_id', childId)
+      .eq('status', 'achieved')
+      .order('achieved_at', { ascending: false })
+
+    if (!error && data && data.length > 0) {
+      return data
+    }
+  } catch (e) {
+    console.warn('Fetch achieved wishes fallback:', e)
+  }
+
+  const wishes = getLocalWishes()
+  return wishes.filter((w) => w.child_id === childId && w.status === 'achieved')
+}
+
+export async function approveWishAndCreateAlbum(
+  wishId: string,
+  childId: string,
+  deductPoints: number,
+  proofImageDataUrl?: string,
+  parentMessage?: string,
+  redemptionType: string = '포인트 교환 🎁'
+): Promise<number> {
+  // 1. 포인트 원장 차감 기록
+  await addPointsLedger(childId, -deductPoints, `소원 선물 승인 차감 (${redemptionType})`)
+
+  // 2. wishes 테이블 UPDATE
+  try {
+    const supabase = createClient()
+    let res = await supabase
+      .from('wishes')
+      .update({
+        status: 'achieved',
+        proof_image_path: proofImageDataUrl || null,
+        parent_message: parentMessage || null,
+        redemption_type: redemptionType,
+        achieved_at: new Date().toISOString()
+      })
+      .eq('id', wishId)
+
+    if (res.error) {
+      // fallback (parent_message 컬럼 미존재 스키마 대비)
+      await supabase
+        .from('wishes')
+        .update({
+          status: 'achieved',
+          proof_image_path: proofImageDataUrl || null,
+          achieved_at: new Date().toISOString()
+        })
+        .eq('id', wishId)
+    }
+  } catch (e) {
+    console.warn('Approve wish & album fallback:', e)
+  }
+
+  // 3. 로컬 스토리지 동기화
+  if (typeof window !== 'undefined') {
+    const wishes = getLocalWishes()
+    const updated = wishes.map((w) =>
+      w.id === wishId || (w.child_id === childId && w.status === 'active')
+        ? {
+            ...w,
+            status: 'achieved',
+            proof_image_path: proofImageDataUrl || w.proof_image_path,
+            parent_message: parentMessage,
+            redemption_type: redemptionType,
+            achieved_at: new Date().toISOString()
+          }
+        : w
+    )
+    localStorage.setItem(LOCAL_STORAGE_KEY_WISHES, JSON.stringify(updated))
+  }
+
+  const newPoints = await fetchChildPoints(childId)
+  return newPoints
 }
 
 export async function updateWishStatus(wishId: string, status: 'active' | 'achieved'): Promise<void> {

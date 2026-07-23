@@ -10,9 +10,9 @@ import {
   updateChildProfile,
   deleteChildProfile,
   fetchChildPoints,
-  addPointsLedger,
   fetchWishes,
-  updateWishStatus,
+  fetchAchievedWishes,
+  approveWishAndCreateAlbum,
   ChildProfile,
   UserAccount,
   WishItem,
@@ -24,11 +24,22 @@ export default function ParentDashboardPage() {
   const [children, setChildren] = useState<ChildProfile[]>([])
   const [hasApiKey, setHasApiKey] = useState<boolean>(false)
 
-  // 소원 승인 팝업 모달 상태
-  const [showApprovalModal, setShowApprovalModal] = useState<boolean>(false)
+  // 소원 및 포인트 상태
   const [wishes, setWishes] = useState<WishItem[]>([])
   const [wishStatus, setWishStatus] = useState<'active' | 'achieved'>('active')
   const [childPoints, setChildPoints] = useState<number>(520)
+
+  // 소원 승인 팝업 개편 모달 상태
+  const [showApprovalModal, setShowApprovalModal] = useState<boolean>(false)
+  const [deductPoints, setDeductPoints] = useState<number>(500)
+  const [redemptionType, setRedemptionType] = useState<string>('포인트 교환 🎁')
+  const [parentMessage, setParentMessage] = useState<string>('')
+  const [proofImage, setProofImage] = useState<string>('')
+  const [isApproving, setIsApproving] = useState<boolean>(false)
+
+  // 추억 앨범 갤러리 모달 상태
+  const [showAlbumModal, setShowAlbumModal] = useState<boolean>(false)
+  const [achievedWishes, setAchievedWishes] = useState<WishItem[]>([])
 
   // 자녀 프로필 추가 모달 상태
   const [showAddChildModal, setShowAddChildModal] = useState<boolean>(false)
@@ -61,6 +72,9 @@ export default function ParentDashboardPage() {
       if (wishList.length > 0 && wishList[0].status) {
         setWishStatus(wishList[0].status as 'active' | 'achieved')
       }
+
+      const achieved = await fetchAchievedWishes(childId)
+      setAchievedWishes(achieved)
     }
   }
 
@@ -79,28 +93,60 @@ export default function ParentDashboardPage() {
     loadData()
   }, [])
 
-  const handleApproveWish = async () => {
-    if (childPoints < 500) {
-      alert('아이의 보유 포인트가 목표 포인트(500P)보다 부족합니다.')
+  // 인증사진 파일 선택 핸들러
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setProofImage(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  // 소원 승인 처리 핸들러 (차감 포인트 반영 및 추억 앨범 저장)
+  const handleApproveWishSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (childPoints < deductPoints) {
+      alert(`보유 포인트(${childPoints}P)보다 차감 포인트(${deductPoints}P)가 큽니다. 포인트를 조율해 주세요!`)
       return
     }
 
-    if (children.length > 0) {
+    if (children.length === 0) return
+
+    setIsApproving(true)
+    try {
       const childId = children[0].id
-      await addPointsLedger(childId, -500, '소원상자 선물 승인 차감')
-      if (wishes.length > 0 && wishes[0].id) {
-        await updateWishStatus(wishes[0].id, 'achieved')
-      }
-      setChildPoints((prev) => prev - 500)
+      const wishId = wishes.length > 0 && wishes[0].id ? wishes[0].id : `wish-${Date.now()}`
+
+      const updatedPoints = await approveWishAndCreateAlbum(
+        wishId,
+        childId,
+        deductPoints,
+        proofImage,
+        parentMessage.trim() || '소원 달성을 축하해요! 항상 응원해 ⭐',
+        redemptionType
+      )
+
+      setChildPoints(updatedPoints)
+      setWishStatus('achieved')
+      setShowApprovalModal(false)
+
+      // 추억 앨범 갱신
+      const userId = user?.id || 'demo-parent-uuid-[#001]'
+      await reloadChildren(userId)
+
+      alert('🎉 소원 선물 승인 및 추억 앨범 보관이 완료되었습니다!')
+    } catch (err) {
+      console.error(err)
+      alert('승인 처리 중 오류가 발생했습니다.')
+    } finally {
+      setIsApproving(false)
     }
-
-    setWishStatus('achieved')
-    setShowApprovalModal(false)
-
-    alert('🎉 소원이 성공적으로 승인되었습니다! 선물 인증샷이 가족 꿈 앨범에 보관됩니다.')
   }
 
-  // 자녀 추가 핸들러
+  // 자녀 추가 제출 핸들러
   const handleAddChildSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newNickname.trim()) {
@@ -144,8 +190,7 @@ export default function ParentDashboardPage() {
     setEditNickname(ch.nickname)
     setEditGrade(ch.grade)
     setEditDreamJob(ch.dream_job || ch.actual_job || '')
-    
-    // 소원 정보 로드
+
     const wishList = await fetchWishes(ch.id)
     if (wishList.length > 0) {
       setEditWishTitle(wishList[0].title || '')
@@ -228,7 +273,15 @@ export default function ParentDashboardPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            <button
+              onClick={() => setShowAlbumModal(true)}
+              className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black text-xs hover:scale-105 transition-transform shadow-md flex items-center gap-1.5"
+            >
+              <span>📸</span>
+              <span>추억 앨범 갤러리 ({achievedWishes.length})</span>
+            </button>
+
             <button
               onClick={() => setShowAddChildModal(true)}
               className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-400 text-[#00205b] font-black text-xs hover:scale-105 transition-transform shadow-md flex items-center gap-1.5"
@@ -278,7 +331,7 @@ export default function ParentDashboardPage() {
             </div>
           </section>
 
-          {/* 2. 등록된 자녀 프로필 세션 (수정 / 삭제 기능 탑재) */}
+          {/* 2. 등록된 자녀 프로필 세션 */}
           <section className="bg-white rounded-3xl p-6 sm:p-7 border border-amber-200/60 shadow-xl shadow-amber-900/5 space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
@@ -470,7 +523,7 @@ export default function ParentDashboardPage() {
                 </div>
               </div>
 
-              <div className="pt-1">
+              <div className="pt-1 flex gap-2">
                 {wishStatus === 'active' ? (
                   <button
                     onClick={() => setShowApprovalModal(true)}
@@ -479,8 +532,14 @@ export default function ParentDashboardPage() {
                     🎁 소원 선물 승인 및 포인트 정산하기
                   </button>
                 ) : (
-                  <div className="text-center py-2.5 text-xs font-black text-emerald-800 bg-emerald-50 rounded-2xl border border-emerald-200">
-                    🎉 선물 승인이 완료되어 가족 꿈 앨범에 보관되었습니다.
+                  <div className="w-full flex justify-between items-center p-3 text-xs font-black text-emerald-800 bg-emerald-50 rounded-2xl border border-emerald-200">
+                    <span>🎉 선물 승인이 완료되어 가족 꿈 앨범에 보관되었습니다.</span>
+                    <button
+                      onClick={() => setShowAlbumModal(true)}
+                      className="px-3 py-1 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 shrink-0 ml-2"
+                    >
+                      📸 앨범 보기
+                    </button>
                   </div>
                 )}
               </div>
@@ -514,6 +573,119 @@ export default function ParentDashboardPage() {
           </div>
         </main>
       </div>
+
+      {/* 개편된 소원 선물 승인 팝업 모달 */}
+      {showApprovalModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
+          <div className="w-full max-w-lg bg-[#FDFBF7] rounded-3xl border-2 border-amber-300 p-6 shadow-2xl space-y-5 overflow-y-auto max-h-[90vh]">
+            <div className="flex justify-between items-center border-b border-amber-200 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">🎁</span>
+                <h3 className="text-lg font-black text-slate-900">소원상자 선물 승인 & 추억 앨범</h3>
+              </div>
+              <button
+                onClick={() => setShowApprovalModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-xs"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleApproveWishSubmit} className="space-y-4 text-xs font-bold">
+              {/* 차감 포인트 설정 & 실시간 계산 */}
+              <div className="bg-amber-50/80 p-4 rounded-2xl border border-amber-200 space-y-3">
+                <div className="flex justify-between items-center text-amber-900 font-black">
+                  <span>신청 소원 선물:</span>
+                  <span className="text-amber-700 font-black">
+                    {wishes.length > 0 ? wishes[0].title : '어린이 선물 세트 🎁'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-slate-600 mb-1">차감할 포인트 (수정 가능)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={childPoints}
+                      value={deductPoints}
+                      onChange={(e) => setDeductPoints(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-amber-600 font-black text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-600 mb-1">정산 후 남는 포인트 (자동계산)</label>
+                    <div className="px-3 py-2.5 bg-white rounded-xl border border-slate-200 text-emerald-600 font-black text-sm">
+                      {Math.max(0, childPoints - deductPoints)} P
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 정산 유형 선택 */}
+              <div>
+                <label className="block text-slate-700 mb-1">정산 유형 선택</label>
+                <select
+                  value={redemptionType}
+                  onChange={(e) => setRedemptionType(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-slate-900 font-bold"
+                >
+                  <option value="포인트 교환 🎁">포인트 교환 🎁 (실물 선물 전달)</option>
+                  <option value="상품권/현물 💳">상품권 / 기프티콘 지급 💳</option>
+                  <option value="체험/소원 달성 🌟">가족 야외 체험 / 소원 달성 🌟</option>
+                  <option value="기타 정산 🎈">기타 축하 선물 🎈</option>
+                </select>
+              </div>
+
+              {/* 부모 축하 메시지 */}
+              <div>
+                <label className="block text-slate-700 mb-1">부모님의 축하 메시지 (추억 앨범 저장)</label>
+                <textarea
+                  rows={2}
+                  placeholder="예: 수빈아, 열심히 문제를 풀어 소원을 이룬 것을 축하해! 사랑해 ❤️"
+                  value={parentMessage}
+                  onChange={(e) => setParentMessage(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-slate-900 font-bold focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              {/* 선물 인증사진 업로드 */}
+              <div>
+                <label className="block text-slate-700 mb-1">📸 선물 전달 인증사진 첨부 (선택)</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageFileChange}
+                  className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-amber-100 file:text-amber-900 hover:file:bg-amber-200"
+                />
+
+                {proofImage && (
+                  <div className="mt-3 relative w-32 h-32 rounded-2xl overflow-hidden border-2 border-amber-300 shadow-sm mx-auto">
+                    <img src={proofImage} alt="인증샷 미리보기" className="w-full h-full object-cover" />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setShowApprovalModal(false)}
+                  className="px-5 py-2.5 rounded-2xl bg-slate-100 text-slate-600 text-xs font-bold hover:bg-slate-200"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={isApproving}
+                  className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 text-amber-950 font-black text-xs shadow-md hover:scale-105 transition-transform disabled:opacity-50"
+                >
+                  {isApproving ? '정산 및 저장 중...' : '🎁 승인 완료 및 추억 앨범에 저장'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* 자녀 프로필 추가 모달 */}
       {showAddChildModal && (
@@ -723,51 +895,76 @@ export default function ParentDashboardPage() {
         </div>
       )}
 
-      {/* 소원 승인 팝업 모달 */}
-      {showApprovalModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-md animate-fade-in">
-          <div className="w-full max-w-md bg-[#FDFBF7] rounded-3xl border-2 border-amber-300 p-6 shadow-2xl space-y-5">
-            <div className="text-center">
-              <div className="inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-amber-100 text-4xl mb-2 border border-amber-300">
-                🎁
+      {/* 📸 추억 앨범 갤러리 모달 */}
+      {showAlbumModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
+          <div className="w-full max-w-2xl bg-[#FDFBF7] rounded-3xl border-2 border-emerald-300 p-6 shadow-2xl space-y-5 max-h-[85vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-emerald-200 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">📸</span>
+                <h3 className="text-lg font-black text-emerald-950">가족 꿈 추억 앨범 갤러리</h3>
               </div>
-              <h3 className="text-xl font-black text-slate-900">소원상자 선물 승인</h3>
-              <p className="text-xs text-slate-500 font-bold mt-1">
-                {childName} 어린이가 학습 미션을 완료하여 모은 포인트를 DB 원장에서 정산하고 선물을 승인합니다.
-              </p>
-            </div>
-
-            <div className="bg-white p-4 rounded-2xl border border-amber-200 space-y-2 text-xs font-bold">
-              <div className="flex justify-between text-slate-700">
-                <span>신청 소원:</span>
-                <span className="font-black text-amber-700">
-                  {wishes.length > 0 ? wishes[0].title : '원하는 소원 선물 🎁'}
-                </span>
-              </div>
-              <div className="flex justify-between text-slate-700">
-                <span>차감 포인트:</span>
-                <span className="font-black text-rose-600">-500 P</span>
-              </div>
-              <div className="flex justify-between text-slate-700 pt-1 border-t border-slate-100">
-                <span>정산 후 남는 포인트:</span>
-                <span className="font-black text-emerald-600">{childPoints - 500} P</span>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-2">
               <button
-                onClick={() => setShowApprovalModal(false)}
-                className="px-5 py-2.5 rounded-2xl bg-slate-100 text-slate-600 text-xs font-bold hover:bg-slate-200 transition-colors"
+                onClick={() => setShowAlbumModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-xs"
               >
-                취소
-              </button>
-              <button
-                onClick={handleApproveWish}
-                className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 text-amber-950 font-black text-xs shadow-md hover:scale-105 transition-transform"
-              >
-                🎁 선물 승인 및 정산 완료
+                ✕
               </button>
             </div>
+
+            {achievedWishes.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {achievedWishes.map((item, idx) => (
+                  <div
+                    key={item.id || idx}
+                    className="bg-white rounded-2xl p-4 border border-emerald-200 shadow-md space-y-3 flex flex-col justify-between"
+                  >
+                    {item.proof_image_path ? (
+                      <div className="w-full h-44 rounded-xl overflow-hidden bg-slate-100 border border-slate-200">
+                        <img
+                          src={item.proof_image_path}
+                          alt={item.title}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-full h-36 rounded-xl bg-gradient-to-tr from-amber-100 via-yellow-50 to-emerald-100 flex items-center justify-center text-4xl border border-emerald-200">
+                        🎁
+                      </div>
+                    )}
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-black text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                          {item.redemption_type || '포인트 교환'}
+                        </span>
+                        <span className="text-[11px] font-bold text-slate-400">
+                          {item.achieved_at ? new Date(item.achieved_at).toLocaleDateString() : '달성 완료'}
+                        </span>
+                      </div>
+
+                      <h4 className="text-base font-black text-slate-900">{item.title}</h4>
+
+                      {item.parent_message && (
+                        <p className="text-xs text-slate-600 bg-amber-50 p-2.5 rounded-xl border border-amber-200/60 font-medium italic mt-2">
+                          "{item.parent_message}"
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 space-y-3 text-slate-500">
+                <div className="w-16 h-16 rounded-3xl bg-emerald-100 flex items-center justify-center text-3xl mx-auto border border-emerald-200">
+                  📸
+                </div>
+                <p className="text-sm font-bold">아직 보관된 소원 달성 추억 앨범이 없습니다.</p>
+                <p className="text-xs text-slate-400">
+                  아이가 500포인트를 모아 소원을 달성하고 부모가 승인하면 여기에 예쁜 인증샷 갤러리가 보관됩니다!
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}

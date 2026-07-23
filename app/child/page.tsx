@@ -10,8 +10,10 @@ import {
   fetchChildrenProfiles,
   fetchChildPoints,
   addPointsLedger,
+  fetchAchievedWishes,
   ChildProfile,
-  UserAccount
+  UserAccount,
+  WishItem
 } from '@/lib/auth'
 import { getDailyMissionQuestions, QuestionItem } from '@/lib/questions'
 
@@ -21,6 +23,10 @@ export default function ChildDashboardPage() {
 
   // 포인트 상태 (DB 연동)
   const [points, setPoints] = useState<number>(120)
+
+  // 추억 앨범 갤러리 모달 상태
+  const [showAlbumModal, setShowAlbumModal] = useState<boolean>(false)
+  const [achievedWishes, setAchievedWishes] = useState<WishItem[]>([])
 
   // 개념 숙달도 상태
   const [masteryMap, setMasteryMap] = useState<Record<string, number>>({
@@ -46,9 +52,13 @@ export default function ChildDashboardPage() {
       if (u) {
         const list = await fetchChildrenProfiles(u.id)
         if (list.length > 0) {
-          setChild(list[0])
-          const dbPoints = await fetchChildPoints(list[0].id)
+          const selectedChild = list[0]
+          setChild(selectedChild)
+          const dbPoints = await fetchChildPoints(selectedChild.id)
           setPoints(dbPoints)
+
+          const achieved = await fetchAchievedWishes(selectedChild.id)
+          setAchievedWishes(achieved)
         } else {
           setChild({
             id: 'child-demo',
@@ -313,7 +323,7 @@ export default function ChildDashboardPage() {
           </div>
         </section>
 
-        {/* 성취 곡선 & 소원 퍼즐 */}
+        {/* 성취 곡선 & 소원 퍼즐 (추억 앨범 갤러리 추가) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white rounded-3xl p-6 border border-amber-200/60 shadow-lg shadow-amber-900/5 flex flex-col justify-between">
             <div>
@@ -381,9 +391,12 @@ export default function ChildDashboardPage() {
                   <span>🎁</span>
                   <span>나의 첫 소원상자 퍼즐</span>
                 </h3>
-                <span className="text-xs bg-amber-100 text-amber-900 px-3 py-1 rounded-full font-black">
-                  진행 중 🧩
-                </span>
+                <button
+                  onClick={() => setShowAlbumModal(true)}
+                  className="text-xs bg-emerald-100 hover:bg-emerald-200 text-emerald-900 px-3 py-1 rounded-full font-black border border-emerald-300 transition-colors flex items-center gap-1 shadow-sm"
+                >
+                  <span>📸 추억 앨범 ({achievedWishes.length})</span>
+                </button>
               </div>
 
               <div className="bg-gradient-to-br from-amber-50/80 to-orange-50/80 rounded-2xl p-5 border border-amber-200/80 space-y-3">
@@ -445,6 +458,80 @@ export default function ChildDashboardPage() {
           dreamJob={dreamJob}
           onClose={handleCloseAiModal}
         />
+      )}
+
+      {/* 📸 추억 앨범 갤러리 모달 (아이 모드) */}
+      {showAlbumModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
+          <div className="w-full max-w-2xl bg-[#FDFBF7] rounded-3xl border-2 border-emerald-300 p-6 shadow-2xl space-y-5 max-h-[85vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-emerald-200 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">📸</span>
+                <h3 className="text-lg font-black text-emerald-950">{childName}의 추억 앨범 갤러리</h3>
+              </div>
+              <button
+                onClick={() => setShowAlbumModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-xs"
+              >
+                ✕
+              </button>
+            </div>
+
+            {achievedWishes.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {achievedWishes.map((item, idx) => (
+                  <div
+                    key={item.id || idx}
+                    className="bg-white rounded-2xl p-4 border border-emerald-200 shadow-md space-y-3 flex flex-col justify-between"
+                  >
+                    {item.proof_image_path ? (
+                      <div className="w-full h-44 rounded-xl overflow-hidden bg-slate-100 border border-slate-200">
+                        <img
+                          src={item.proof_image_path}
+                          alt={item.title}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-full h-36 rounded-xl bg-gradient-to-tr from-amber-100 via-yellow-50 to-emerald-100 flex items-center justify-center text-4xl border border-emerald-200">
+                        🎁
+                      </div>
+                    )}
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-black text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                          {item.redemption_type || '포인트 교환'}
+                        </span>
+                        <span className="text-[11px] font-bold text-slate-400">
+                          {item.achieved_at ? new Date(item.achieved_at).toLocaleDateString() : '달성 완료'}
+                        </span>
+                      </div>
+
+                      <h4 className="text-base font-black text-slate-900">{item.title}</h4>
+
+                      {item.parent_message && (
+                        <p className="text-xs text-slate-600 bg-amber-50 p-2.5 rounded-xl border border-amber-200/60 font-medium italic mt-2">
+                          "{item.parent_message}"
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 space-y-3 text-slate-500">
+                <div className="w-16 h-16 rounded-3xl bg-emerald-100 flex items-center justify-center text-3xl mx-auto border border-emerald-200">
+                  📸
+                </div>
+                <p className="text-sm font-bold">아직 보관된 소원 달성 추억 앨범이 없습니다.</p>
+                <p className="text-xs text-slate-400">
+                  매일 문제를 풀어 500포인트를 모으면 부모님께서 예쁜 선물과 축하 메시지를 앨범에 보관해 주실 거예요!
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )
