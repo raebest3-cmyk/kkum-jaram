@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { getUserApiKey } from '@/lib/auth'
+import { generateAiChatResponse } from '@/lib/gemini'
 
 interface AiChatModalProps {
   childName: string
@@ -21,7 +21,7 @@ export default function AiChatModal({ childName, dreamJob, onClose }: AiChatModa
     {
       id: 'msg-1',
       sender: 'ai',
-      text: `안녕 ${childName} 요리사님! 👨‍🍳 마이크 버튼 🎙️을 누르고 말하거나 텍스트로 나눗셈 개념을 설명해 볼까요?`,
+      text: `안녕 ${childName} 어린이! ✨ Gemini AI 선생님이에요! 마이크 버튼 🎙️을 누르고 음성으로 말하거나 텍스트로 나눗셈 개념을 자유롭게 이야기해 볼까요?`,
       timestamp: '방금 전'
     }
   ])
@@ -32,18 +32,6 @@ export default function AiChatModal({ childName, dreamJob, onClose }: AiChatModa
 
   // STT (Web Speech API) 상태
   const [isListening, setIsListening] = useState(false)
-  const [speechSupported, setSpeechSupported] = useState(true)
-
-  useEffect(() => {
-    // Web Speech API 지원 확인
-    if (typeof window !== 'undefined') {
-      const SpeechRecognition =
-        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-      if (!SpeechRecognition) {
-        setSpeechSupported(false)
-      }
-    }
-  }, [])
 
   // STT 음성 인식 시작/중지
   const toggleSpeechRecognition = () => {
@@ -97,7 +85,7 @@ export default function AiChatModal({ childName, dreamJob, onClose }: AiChatModa
     }
   }
 
-  // 메시지 전송 및 AI 응답 처리
+  // 메시지 전송 및 Gemini 1.5 Flash AI 응답 처리
   const handleSendMessage = async () => {
     if (!input.trim() || loading) return
 
@@ -111,54 +99,46 @@ export default function AiChatModal({ childName, dreamJob, onClose }: AiChatModa
 
     setMessages((prev) => [...prev, newMsg])
     setInput('')
-    setLoading(false)
+    setLoading(true)
     setIsListening(false)
 
-    // AI 응답 시뮬레이션 / BYOK 호출
-    setTimeout(() => {
-      let aiText = ''
-      const key = getUserApiKey()
-
-      if (userText.includes('나누기') || userText.includes('조각') || userText.includes('나눗셈')) {
-        aiText = `와! ${childName} 요리사님이 똑같이 나누어 담는 원리를 정말 근사하게 음성으로 설명했네요! 🍕 피자 한 판을 친구들과 나눌 때 나눗셈을 쓰는 이유를 잘 파악했어요! 칭찬해요 ⭐`
-      } else if (userText.includes('분수') || userText.includes('조각')) {
-        aiText = `맞아요! 전체를 똑같이 나눈 것 중 몇 조각인지 생각하는 분수의 개념을 훌륭하게 말해줬어요! 👏`
-      } else {
-        aiText = `좋은 생각이에요! ${childName} 요리사님의 눈높이 설명 덕분에 나눗셈이 훨씬 쉽게 이해되네요! 🌟 훌륭하게 미션을 수행했어요!`
-      }
+    try {
+      // Gemini 1.5 Flash API 호출
+      const aiReply = await generateAiChatResponse(userText, childName, dreamJob)
 
       setMessages((prev) => [
         ...prev,
         {
           id: `msg-ai-${Date.now()}`,
           sender: 'ai',
-          text: aiText,
+          text: aiReply,
           timestamp: '방금 전'
         }
       ])
-      setLoading(false)
       setIsCompleted(true)
-    }, 1000)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-md animate-fade-in">
       <div className="w-full max-w-xl bg-[#FDFBF7] rounded-3xl border-2 border-amber-300 shadow-2xl overflow-hidden flex flex-col h-[620px] max-h-[90vh]">
-        {/* 파스텔 옐로우/오렌지 모달 헤더 */}
+        {/* Gemini 1.5 Flash 대화 모달 헤더 */}
         <div className="bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-200 text-amber-950 px-6 py-4 flex justify-between items-center border-b border-amber-300 shadow-sm">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-white flex items-center justify-center text-2xl shadow-sm border border-amber-300">
-              🤖
+              ✨
             </div>
             <div>
               <h2 className="text-lg font-black tracking-tight text-amber-950 flex items-center gap-2">
-                <span>AI 선생님과 말로 설명하기</span>
-                <span className="text-xs font-bold bg-amber-300/80 text-amber-950 px-2 py-0.5 rounded-full">
-                  STT 지원 🎙️
+                <span>Gemini AI 말로 설명하기</span>
+                <span className="text-[10px] font-black bg-[#003087] text-white px-2 py-0.5 rounded-full">
+                  Gemini 1.5 Flash ⚡
                 </span>
               </h2>
               <p className="text-xs text-amber-800 font-extrabold">
-                {childName} 요리사의 음성 탐구 세션 ✦
+                {childName} 어린이의 음성 탐구 세션 ✦
               </p>
             </div>
           </div>
@@ -187,7 +167,7 @@ export default function AiChatModal({ childName, dreamJob, onClose }: AiChatModa
                     : 'bg-white text-emerald-700 border-amber-200'
                 }`}
               >
-                {msg.sender === 'child' ? '👧' : '🤖'}
+                {msg.sender === 'child' ? '👧' : '✨'}
               </div>
 
               <div
@@ -204,7 +184,7 @@ export default function AiChatModal({ childName, dreamJob, onClose }: AiChatModa
 
           {loading && (
             <div className="flex items-center gap-2 text-xs font-bold text-amber-700 bg-amber-50 px-4 py-2 rounded-full w-fit border border-amber-200 animate-pulse">
-              <span>🤖 AI 선생님이 수빈이의 음성 설명을 듣는 중...</span>
+              <span>✨ Gemini 1.5 Flash가 생각하는 중...</span>
             </div>
           )}
 
