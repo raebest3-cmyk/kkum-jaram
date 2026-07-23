@@ -84,10 +84,12 @@ export default function ChildDashboardPage() {
     loadData()
   }, [])
 
+  // 학년별 맞춤 출제 함수 연동
   const handleStartMission = async () => {
     setLoadingMission(true)
     try {
-      const qList = await getDailyMissionQuestions()
+      const currentGrade = child?.grade || 3
+      const qList = await getDailyMissionQuestions(currentGrade)
       setQuestions(qList)
       setShowMissionModal(true)
     } finally {
@@ -178,7 +180,7 @@ export default function ChildDashboardPage() {
                 <div className="mt-3 inline-flex items-center gap-2 bg-[#FFF8E7] text-[#B45309] border border-[#FDE68A] px-4 py-2 rounded-2xl text-xs font-bold shadow-sm">
                   <span className="text-base">🚀</span>
                   <span>
-                    <strong>{childName} 어린이의 오늘 특별 학습 미션!</strong> {dreamJob}의 꿈을 위해 10개 문항을 풀고 보상을 받아보세요!
+                    <strong>{childName} 어린이({grade}학년)의 오늘 맞춤 미션!</strong> {dreamJob}의 꿈을 위해 문항을 풀고 보상을 받아보세요!
                   </span>
                 </div>
               </div>
@@ -206,10 +208,10 @@ export default function ChildDashboardPage() {
             <div>
               <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
                 <span>🎯</span>
-                <span>오늘의 미션 (3종)</span>
+                <span>오늘의 맞춤 미션 ({grade}학년 레벨)</span>
               </h2>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                버튼을 누르면 실시간 문제 풀이가 시작됩니다!
+                버튼을 누르면 {grade}학년 맞춤 수학 문제 풀이가 시작됩니다!
               </p>
             </div>
           </div>
@@ -223,14 +225,14 @@ export default function ChildDashboardPage() {
                     01
                   </span>
                   <span className="bg-white/80 text-[#0D8A68] text-[11px] font-black px-3 py-1 rounded-full border border-[#A7F3D0]">
-                    일반 미션 🌿
+                    {grade}학년 수학 🌿
                   </span>
                 </div>
                 <h3 className="text-xl font-black text-[#065F46] mb-1">
                   오늘의 수학 10문항
                 </h3>
                 <p className="text-xs text-[#0D8A68]/80 leading-relaxed font-bold mb-6">
-                  복습 문제 4개 + 새로운 도전 문제 6개 (실시간 채점과 힌트 제공)
+                  {grade}학년 단원 맞춤 문제 (실시간 채점과 Gemini AI 힌트 제공)
                 </p>
               </div>
 
@@ -293,7 +295,7 @@ export default function ChildDashboardPage() {
                   AI와 말로 설명하기
                 </h3>
                 <p className="text-xs text-amber-800/80 leading-relaxed font-bold mb-6">
-                  음성 마이크🎙️로 직접 나눗셈 개념을 AI 선생님에게 설명해 봐요!
+                  음성 마이크🎙️로 직접 수학 개념을 Gemini AI 선생님에게 설명해 봐요!
                 </p>
               </div>
 
@@ -318,7 +320,7 @@ export default function ChildDashboardPage() {
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
                   <span>📈</span>
-                  <span>개념 숙달도 성취 곡선</span>
+                  <span>{grade}학년 개념 숙달도 성취 곡선</span>
                 </h3>
                 <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
                   성장 곡선 반영
@@ -328,7 +330,7 @@ export default function ChildDashboardPage() {
               <div className="space-y-4 pt-1">
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs font-bold">
-                    <span className="text-slate-700">세 자리 수 덧셈·뺄셈</span>
+                    <span className="text-slate-700">단원 1 핵심 개념</span>
                     <span className="text-emerald-600">{addMastery}% (숙달)</span>
                   </div>
                   <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden p-0.5 border border-slate-200/60">
@@ -341,7 +343,7 @@ export default function ChildDashboardPage() {
 
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs font-bold">
-                    <span className="text-slate-700">곱셈과 나눗셈 기초</span>
+                    <span className="text-slate-700">단원 2 응용 개념</span>
                     <span className="text-amber-600">{mulMastery}% (성장 중)</span>
                   </div>
                   <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden p-0.5 border border-slate-200/60">
@@ -354,7 +356,7 @@ export default function ChildDashboardPage() {
 
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs font-bold">
-                    <span className="text-slate-700">분수와 소수 한 자리</span>
+                    <span className="text-slate-700">단원 3 심화 개념</span>
                     <span className="text-blue-600">{fracMastery}% (도전 중)</span>
                   </div>
                   <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden p-0.5 border border-slate-200/60">
