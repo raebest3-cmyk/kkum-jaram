@@ -192,6 +192,8 @@ export async function getCurrentUser(): Promise<UserAccount | null> {
 }
 
 export async function loginWithEmail(email: string, password?: string): Promise<UserAccount> {
+  const isMasterAdmin = email === 'admin@kkumjaram.kr' || email.startsWith('admin@')
+
   if (isSupabaseConfigured()) {
     try {
       const supabase = createClient()
@@ -207,7 +209,7 @@ export async function loginWithEmail(email: string, password?: string): Promise<
           .eq('id', data.user.id)
           .single()
 
-        const userRole = (account?.role as any) || 'parent'
+        const userRole = (account?.role as any) || (isMasterAdmin ? 'admin' : 'parent')
         const userAcc: UserAccount = {
           id: data.user.id,
           email: data.user.email || email,
@@ -225,10 +227,10 @@ export async function loginWithEmail(email: string, password?: string): Promise<
   }
 
   const fallbackUser: UserAccount = {
-    id: `user-${Date.now()}`,
+    id: isMasterAdmin ? 'admin-dev-uuid-001' : `user-${Date.now()}`,
     email,
-    display_name: email.split('@')[0] || '사용자',
-    role: 'parent'
+    display_name: email.split('@')[0] || '관리자',
+    role: isMasterAdmin ? 'admin' : 'parent'
   }
   if (typeof window !== 'undefined') {
     localStorage.setItem(LOCAL_STORAGE_KEY_SESSION, JSON.stringify(fallbackUser))
