@@ -146,28 +146,36 @@ export async function fetchAdminStats(): Promise<AdminStats> {
   }
 }
 
+export function isSupabaseConfigured(): boolean {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  return !!(url && key && !key.includes('placeholder') && !key.includes('your-anon-key'))
+}
+
 // 현재 로그인 사용자 세션 조회
 export async function getCurrentUser(): Promise<UserAccount | null> {
-  try {
-    const supabase = createClient()
-    const { data: { user }, error } = await supabase.auth.getUser()
-    if (user && !error) {
-      const { data: account } = await supabase
-        .from('accounts')
-        .select('*')
-        .eq('id', user.id)
-        .single()
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = createClient()
+      const { data: { user }, error } = await supabase.auth.getUser()
+      if (user && !error) {
+        const { data: account } = await supabase
+          .from('accounts')
+          .select('*')
+          .eq('id', user.id)
+          .single()
 
-      const userRole = (account?.role as any) || (user.email?.includes('admin') ? 'admin' : 'parent')
-      return {
-        id: user.id,
-        email: user.email || '',
-        display_name: account?.display_name || user.email?.split('@')[0],
-        role: userRole
+        const userRole = (account?.role as any) || (user.email?.includes('admin') ? 'admin' : 'parent')
+        return {
+          id: user.id,
+          email: user.email || '',
+          display_name: account?.display_name || user.email?.split('@')[0],
+          role: userRole
+        }
       }
+    } catch (e) {
+      console.warn('Supabase auth check error:', e)
     }
-  } catch (e) {
-    console.warn('Supabase auth user check fallback to localStorage:', e)
   }
 
   if (typeof window !== 'undefined') {
@@ -184,34 +192,36 @@ export async function getCurrentUser(): Promise<UserAccount | null> {
 }
 
 export async function loginWithEmail(email: string, password?: string): Promise<UserAccount> {
-  try {
-    const supabase = createClient()
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password: password || ''
-    })
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password: password || ''
+      })
 
-    if (!error && data?.user) {
-      const { data: account } = await supabase
-        .from('accounts')
-        .select('*')
-        .eq('id', data.user.id)
-        .single()
+      if (!error && data?.user) {
+        const { data: account } = await supabase
+          .from('accounts')
+          .select('*')
+          .eq('id', data.user.id)
+          .single()
 
-      const userRole = (account?.role as any) || (email.includes('admin') ? 'admin' : 'parent')
-      const userAcc: UserAccount = {
-        id: data.user.id,
-        email: data.user.email || email,
-        display_name: account?.display_name || email.split('@')[0],
-        role: userRole
+        const userRole = (account?.role as any) || (email.includes('admin') ? 'admin' : 'parent')
+        const userAcc: UserAccount = {
+          id: data.user.id,
+          email: data.user.email || email,
+          display_name: account?.display_name || email.split('@')[0],
+          role: userRole
+        }
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(LOCAL_STORAGE_KEY_SESSION, JSON.stringify(userAcc))
+        }
+        return userAcc
       }
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(LOCAL_STORAGE_KEY_SESSION, JSON.stringify(userAcc))
-      }
-      return userAcc
+    } catch (e) {
+      console.warn('Supabase signin error:', e)
     }
-  } catch (e) {
-    console.warn('Supabase auth signin error, using local session fallback:', e)
   }
 
   const isAdminEmail = email.includes('admin') || email === 'admin@kkumjaram.kr'
@@ -228,38 +238,40 @@ export async function loginWithEmail(email: string, password?: string): Promise<
 }
 
 export async function registerParentAccount(email: string, displayName: string, password?: string): Promise<UserAccount> {
-  try {
-    const supabase = createClient()
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password: password || '',
-      options: {
-        data: { display_name: displayName }
-      }
-    })
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password: password || '',
+        options: {
+          data: { display_name: displayName }
+        }
+      })
 
-    if (!error && data?.user) {
-      const isAdminEmail = email.includes('admin') || email === 'admin@kkumjaram.kr'
-      const roleVal = isAdminEmail ? 'admin' : 'parent'
-      await supabase.from('accounts').upsert({
-        id: data.user.id,
-        display_name: displayName,
-        role: roleVal
-      }, { onConflict: 'id' })
+      if (!error && data?.user) {
+        const isAdminEmail = email.includes('admin') || email === 'admin@kkumjaram.kr'
+        const roleVal = isAdminEmail ? 'admin' : 'parent'
+        await supabase.from('accounts').upsert({
+          id: data.user.id,
+          display_name: displayName,
+          role: roleVal
+        }, { onConflict: 'id' })
 
-      const userAcc: UserAccount = {
-        id: data.user.id,
-        email: data.user.email || email,
-        display_name: displayName,
-        role: roleVal
+        const userAcc: UserAccount = {
+          id: data.user.id,
+          email: data.user.email || email,
+          display_name: displayName,
+          role: roleVal
+        }
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(LOCAL_STORAGE_KEY_SESSION, JSON.stringify(userAcc))
+        }
+        return userAcc
       }
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(LOCAL_STORAGE_KEY_SESSION, JSON.stringify(userAcc))
-      }
-      return userAcc
+    } catch (e) {
+      console.warn('Supabase signup error:', e)
     }
-  } catch (e) {
-    console.warn('Supabase auth signup error, using local session fallback:', e)
   }
 
   const isAdminEmail = email.includes('admin') || email === 'admin@kkumjaram.kr'
