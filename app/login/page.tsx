@@ -32,12 +32,15 @@ export default function LoginPage() {
         loggedUser = await loginWithEmail(email, password)
       }
 
-      // 아이 프로필이 이미 등록되어 있는지 확인
-      const children = await fetchChildrenProfiles(loggedUser.id)
-      if (children.length === 0) {
-        router.push('/onboarding')
+      if (loggedUser?.role === 'admin') {
+        router.push('/admin')
       } else {
-        router.push('/child')
+        const children = await fetchChildrenProfiles(loggedUser.id)
+        if (children.length === 0) {
+          router.push('/onboarding')
+        } else {
+          router.push('/child')
+        }
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '인증 중 오류가 발생했습니다.'
