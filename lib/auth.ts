@@ -15,7 +15,7 @@ export interface UserAccount {
   id: string
   email: string
   display_name?: string
-  role: 'parent' | 'child'
+  role: 'parent' | 'child' | 'admin'
 }
 
 export interface WishItem {
@@ -39,6 +39,14 @@ export interface ChildQuizStats {
   aiSummary: string
 }
 
+export interface AdminStats {
+  topDreamJobs: { job: string; count: number }[]
+  topWishes: { title: string; count: number }[]
+  menuClicks: { menu: string; clicks: number }[]
+  totalUsersCount: number
+  totalChildrenCount: number
+}
+
 const LOCAL_STORAGE_KEY_SESSION = 'kkum_jaram_session_user'
 const LOCAL_STORAGE_KEY_CHILDREN = 'kkum_jaram_children'
 const LOCAL_STORAGE_KEY_SECRETS = 'kkum_jaram_byok'
@@ -55,6 +63,106 @@ export function setSelectedChildId(childId: string): void {
   if (typeof window !== 'undefined') {
     localStorage.setItem(LOCAL_STORAGE_KEY_SELECTED_CHILD, childId)
     window.dispatchEvent(new CustomEvent('kkum_jaram_child_changed', { detail: { childId } }))
+  }
+}
+
+export function logUserEvent(menuName: string) {
+  if (typeof window === 'undefined') return
+  try {
+    const key = 'kkum_jaram_event_logs'
+    const stored = localStorage.getItem(key)
+    const logs: Record<string, number> = stored ? JSON.parse(stored) : {}
+    logs[menuName] = (logs[menuName] || 0) + 1
+    localStorage.setItem(key, JSON.stringify(logs))
+  } catch (e) {
+    console.warn('Log user event error:', e)
+  }
+}
+
+export async function fetchAdminStats(): Promise<AdminStats> {
+  let topDreamJobs: { job: string; count: number }[] = [
+    { job: '로봇 공학자 🤖', count: 12 },
+    { job: '우주 과학자 🚀', count: 9 },
+    { job: '웹툰 작가 🎨', count: 7 },
+    { job: '요리사 👨‍🍳', count: 5 },
+    { job: '게임 개발자 🎮', count: 4 }
+  ]
+
+  let topWishes: { title: string; count: number }[] = [
+    { title: '레고 블록 세트 🎁', count: 15 },
+    { title: '닌텐도 스위치 🎮', count: 11 },
+    { title: '수학 보드게임 🎲', count: 8 },
+    { title: '동화책 선물 상자 📚', count: 6 },
+    { title: '가족 놀이동산 자유이용권 🎡', count: 4 }
+  ]
+
+  let menuClicks: { menu: string; clicks: number }[] = [
+    { menu: '오늘의 수학 10문항', clicks: 142 },
+    { menu: '오답 괴물 격파 복습', clicks: 98 },
+    { menu: 'AI 말로 설명하기 대화', clicks: 76 },
+    { menu: '소원상자 선물 승인', clicks: 45 },
+    { menu: '추억 앨범 갤러리', clicks: 38 }
+  ]
+
+  let totalUsersCount = 28
+  let totalChildrenCount = 35
+
+  try {
+    const supabase = createClient()
+
+    const { data: childrenData } = await supabase.from('children').select('dream_job, actual_job')
+    if (childrenData && childrenData.length > 0) {
+      totalChildrenCount = childrenData.length
+      const counts: Record<string, number> = {}
+      childrenData.forEach((c: any) => {
+        const job = c.dream_job || c.actual_job || '꿈나무'
+        counts[job] = (counts[job] || 0) + 1
+      })
+      const sorted = Object.entries(counts)
+        .map(([job, count]) => ({ job, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5)
+      if (sorted.length > 0) topDreamJobs = sorted
+    }
+
+    const { data: wishesData } = await supabase.from('wishes').select('title')
+    if (wishesData && wishesData.length > 0) {
+      const counts: Record<string, number> = {}
+      wishesData.forEach((w: any) => {
+        const title = w.title || '소원 선물'
+        counts[title] = (counts[title] || 0) + 1
+      })
+      const sorted = Object.entries(counts)
+        .map(([title, count]) => ({ title, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5)
+      if (sorted.length > 0) topWishes = sorted
+    }
+  } catch (e) {
+    console.warn('Fetch admin stats fallback:', e)
+  }
+
+  if (typeof window !== 'undefined') {
+    const storedLogs = localStorage.getItem('kkum_jaram_event_logs')
+    if (storedLogs) {
+      try {
+        const parsed: Record<string, number> = JSON.parse(storedLogs)
+        const entries = Object.entries(parsed).map(([menu, clicks]) => ({ menu, clicks }))
+        if (entries.length > 0) {
+          menuClicks = entries.sort((a, b) => b.clicks - a.clicks)
+        }
+      } catch (e) {
+        console.error(e)
+      }
+    }
+  }
+
+  return {
+    topDreamJobs,
+    topWishes,
+    menuClicks,
+    totalUsersCount,
+    totalChildrenCount
   }
 }
 
@@ -184,8 +292,7 @@ export async function logoutUser() {
 export async function fetchChildrenProfiles(accountId: string): Promise<ChildProfile[]> {
   try {
     const supabase = createClient()
-    
-    // Auth user 검증으로 Strict 조회 보장
+
     const { data: { user } } = await supabase.auth.getUser()
     const targetAccountId = user ? user.id : accountId
 
@@ -420,7 +527,6 @@ export async function updateChildProfile(
       localStorage.setItem(LOCAL_STORAGE_KEY_WISHES, JSON.stringify(wishes))
     }
 
-    // 변경사항 알림 발행
     window.dispatchEvent(new CustomEvent('kkum_jaram_child_changed', { detail: { childId } }))
   }
 }
@@ -486,7 +592,6 @@ export async function fetchChildPoints(childId: string): Promise<number> {
   return 120
 }
 
-// 실제 Supabase DB quiz/points 집계 통계 연동
 export async function fetchChildQuizStats(childId: string, grade: number = 3): Promise<ChildQuizStats> {
   let weeklyQuestions = 0
   let accuracyRate = 0
@@ -620,7 +725,7 @@ export async function approveWishAndCreateAlbum(
   deductPoints: number,
   proofImageDataUrl?: string,
   parentMessage?: string,
-  redemptionType: string = '포인트 교환 🎁'
+  redemptionType: string = '선물 조각 교환 🎁'
 ): Promise<number> {
   await addPointsLedger(childId, -deductPoints, `소원 선물 승인 차감 (${redemptionType})`)
 

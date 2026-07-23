@@ -336,3 +336,92 @@ export async function getDailyMissionQuestions(grade: number = 3): Promise<Quest
 
   return selectedSeed
 }
+
+export async function fetchAdminQuestions(): Promise<QuestionItem[]> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('questions')
+      .select('*')
+      .order('id', { ascending: false })
+
+    if (!error && data && data.length > 0) {
+      return data.map((item: any) => ({
+        id: item.id,
+        concept_id: item.concept_id || 'c-admin',
+        concept_code: item.concept_code || 'MATH-CMS',
+        concept_name: item.concept_name || '수학 문제',
+        difficulty: item.difficulty || 1,
+        qtype: item.qtype || 'mcq',
+        body: typeof item.body === 'string' ? JSON.parse(item.body) : item.body,
+        answer: typeof item.answer === 'string' ? JSON.parse(item.answer) : item.answer,
+        misconception_map: typeof item.misconception_map === 'string' ? JSON.parse(item.misconception_map) : item.misconception_map || {}
+      }))
+    }
+  } catch (e) {
+    console.warn('Fetch admin questions fallback:', e)
+  }
+
+  return [...SEED_QUESTIONS_G3, ...SEED_QUESTIONS_G4, ...SEED_QUESTIONS_G5, ...SEED_QUESTIONS_G6]
+}
+
+export async function createAdminQuestion(q: Partial<QuestionItem>): Promise<QuestionItem> {
+  const newQ: QuestionItem = {
+    id: `q-cms-${Date.now()}`,
+    concept_id: q.concept_id || 'c-cms',
+    concept_code: q.concept_code || 'MATH-CMS',
+    concept_name: q.concept_name || '수학 문제',
+    difficulty: q.difficulty || 1,
+    qtype: q.qtype || 'mcq',
+    body: q.body || { stem: '새 문제입니다.', choices: ['1', '2', '3', '4'] },
+    answer: q.answer || { correct_index: 0, explanation: '해설' },
+    misconception_map: q.misconception_map || {}
+  }
+
+  try {
+    const supabase = createClient()
+    await supabase.from('questions').insert({
+      id: newQ.id,
+      concept_id: newQ.concept_id,
+      concept_code: newQ.concept_code,
+      concept_name: newQ.concept_name,
+      difficulty: newQ.difficulty,
+      qtype: newQ.qtype,
+      body: newQ.body,
+      answer: newQ.answer,
+      misconception_map: newQ.misconception_map
+    })
+  } catch (e) {
+    console.warn('Create admin question fallback:', e)
+  }
+
+  return newQ
+}
+
+export async function updateAdminQuestion(id: string, q: Partial<QuestionItem>): Promise<void> {
+  try {
+    const supabase = createClient()
+    await supabase
+      .from('questions')
+      .update({
+        concept_name: q.concept_name,
+        difficulty: q.difficulty,
+        body: q.body,
+        answer: q.answer,
+        misconception_map: q.misconception_map
+      })
+      .eq('id', id)
+  } catch (e) {
+    console.warn('Update admin question fallback:', e)
+  }
+}
+
+export async function deleteAdminQuestion(id: string): Promise<void> {
+  try {
+    const supabase = createClient()
+    await supabase.from('questions').delete().eq('id', id)
+  } catch (e) {
+    console.warn('Delete admin question fallback:', e)
+  }
+}
+

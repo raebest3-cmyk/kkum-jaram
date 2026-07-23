@@ -2,7 +2,12 @@
 
 import React, { useRef, useState, useEffect } from 'react'
 
-export default function ScratchCanvas() {
+interface ScratchCanvasProps {
+  onClose?: () => void
+}
+
+export default function ScratchCanvas({ onClose }: ScratchCanvasProps) {
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null)
 
