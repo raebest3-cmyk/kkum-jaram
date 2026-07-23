@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import MissionModal from '@/components/MissionModal'
 import AiChatModal from '@/components/AiChatModal'
@@ -20,6 +21,7 @@ import {
 import { getDailyMissionQuestions, QuestionItem } from '@/lib/questions'
 
 export default function ChildDashboardPage() {
+  const router = useRouter()
   const [user, setUser] = useState<UserAccount | null>(null)
   const [childrenList, setChildrenList] = useState<ChildProfile[]>([])
   const [child, setChild] = useState<ChildProfile | null>(null)
@@ -64,38 +66,24 @@ export default function ChildDashboardPage() {
   useEffect(() => {
     async function loadData() {
       const u = await getCurrentUser()
+      if (!u) {
+        router.push('/login')
+        return
+      }
       setUser(u)
 
-      if (u) {
-        const list = await fetchChildrenProfiles(u.id)
-        setChildrenList(list)
+      const list = await fetchChildrenProfiles(u.id)
+      setChildrenList(list)
 
-        if (list.length > 0) {
-          const savedId = getSelectedChildId()
-          const found = list.find((c) => c.id === savedId)
-          const selected = found || list[0]
-          await loadTargetChildData(selected)
-        } else {
-          const fallbackChild = {
-            id: 'child-demo',
-            account_id: u.id,
-            nickname: '수빈이',
-            grade: 3,
-            dream_job: '로봇 공학자 🤖',
-            theme: 'elementary'
-          }
-          setChild(fallbackChild)
-        }
+      if (list.length > 0) {
+        const savedId = getSelectedChildId()
+        const found = list.find((c) => c.id === savedId)
+        const selected = found || list[0]
+        await loadTargetChildData(selected)
       } else {
-        const fallbackChild = {
-          id: 'child-demo',
-          account_id: 'demo',
-          nickname: '수빈이',
-          grade: 3,
-          dream_job: '로봇 공학자 🤖',
-          theme: 'elementary'
-        }
-        setChild(fallbackChild)
+        // 등록된 아이 프로필이 없으면 온보딩 페이지로 이동
+        router.push('/onboarding')
+        return
       }
 
       if (typeof window !== 'undefined') {
@@ -110,7 +98,7 @@ export default function ChildDashboardPage() {
       }
     }
     loadData()
-  }, [])
+  }, [router])
 
   // 프로필 전환 선택 시
   const handleSwitchChild = async (ch: ChildProfile) => {

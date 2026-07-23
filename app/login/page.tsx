@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
-import { loginWithEmail, registerParentAccount, getChildrenProfiles } from '@/lib/auth'
+import { loginWithEmail, registerParentAccount, fetchChildrenProfiles } from '@/lib/auth'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -16,8 +16,8 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email) {
-      setErrorMsg('이메일을 입력해 주세요.')
+    if (!email || !password) {
+      setErrorMsg('이메일과 비밀번호를 모두 입력해 주세요.')
       return
     }
 
@@ -25,14 +25,15 @@ export default function LoginPage() {
     setErrorMsg('')
 
     try {
+      let loggedUser: any
       if (isSignUp) {
-        await registerParentAccount(email, displayName || email.split('@')[0], password)
+        loggedUser = await registerParentAccount(email, displayName || email.split('@')[0], password)
       } else {
-        await loginWithEmail(email, password)
+        loggedUser = await loginWithEmail(email, password)
       }
 
       // 아이 프로필이 이미 등록되어 있는지 확인
-      const children = getChildrenProfiles()
+      const children = await fetchChildrenProfiles(loggedUser.id)
       if (children.length === 0) {
         router.push('/onboarding')
       } else {
@@ -41,21 +42,6 @@ export default function LoginPage() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '인증 중 오류가 발생했습니다.'
       setErrorMsg(msg)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleDemoLogin = async () => {
-    setLoading(true)
-    try {
-      await loginWithEmail('parent@kkumjaram.kr', 'demopass123')
-      const children = getChildrenProfiles()
-      if (children.length === 0) {
-        router.push('/onboarding')
-      } else {
-        router.push('/child')
-      }
     } finally {
       setLoading(false)
     }
@@ -129,6 +115,7 @@ export default function LoginPage() {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                required
                 className="w-full px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-[#C8A951] text-sm"
               />
             </div>
@@ -141,26 +128,6 @@ export default function LoginPage() {
               {loading ? '처리 중...' : isSignUp ? '회원가입 완료 후 시작하기' : '로그인하기'}
             </button>
           </form>
-
-          {/* 구분선 */}
-          <div className="relative my-6 text-center">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-800" />
-            </div>
-            <span className="relative bg-slate-900 px-3 text-xs text-slate-500 font-medium">
-              또는
-            </span>
-          </div>
-
-          {/* 체험용 1초 데모 로그인 */}
-          <button
-            onClick={handleDemoLogin}
-            disabled={loading}
-            className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-[#C8A951]/30 text-[#C8A951] font-bold text-xs transition-colors flex items-center justify-center gap-2"
-          >
-            <span>🚀</span>
-            <span>체험용 데모 계정으로 1초 로그인</span>
-          </button>
 
           {/* 가입/로그인 전환 하단 텍스트 */}
           <div className="mt-6 text-center text-xs text-slate-400">

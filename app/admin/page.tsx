@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import { getCurrentUser, fetchAdminStats, AdminStats, UserAccount } from '@/lib/auth'
 import {
@@ -12,6 +13,7 @@ import {
 } from '@/lib/questions'
 
 export default function AdminDashboardPage() {
+  const router = useRouter()
   const [user, setUser] = useState<UserAccount | null>(null)
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [questions, setQuestions] = useState<QuestionItem[]>([])
@@ -40,11 +42,15 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     async function init() {
       const u = await getCurrentUser()
+      if (!u) {
+        router.push('/login')
+        return
+      }
       setUser(u)
       await reloadData()
     }
     init()
-  }, [])
+  }, [router])
 
   // 문항 추가 버튼 클릭
   const handleOpenAddModal = () => {

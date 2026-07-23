@@ -80,66 +80,46 @@ export function logUserEvent(menuName: string) {
 }
 
 export async function fetchAdminStats(): Promise<AdminStats> {
-  let topDreamJobs: { job: string; count: number }[] = [
-    { job: '로봇 공학자 🤖', count: 12 },
-    { job: '우주 과학자 🚀', count: 9 },
-    { job: '웹툰 작가 🎨', count: 7 },
-    { job: '요리사 👨‍🍳', count: 5 },
-    { job: '게임 개발자 🎮', count: 4 }
-  ]
-
-  let topWishes: { title: string; count: number }[] = [
-    { title: '레고 블록 세트 🎁', count: 15 },
-    { title: '닌텐도 스위치 🎮', count: 11 },
-    { title: '수학 보드게임 🎲', count: 8 },
-    { title: '동화책 선물 상자 📚', count: 6 },
-    { title: '가족 놀이동산 자유이용권 🎡', count: 4 }
-  ]
-
-  let menuClicks: { menu: string; clicks: number }[] = [
-    { menu: '오늘의 수학 10문항', clicks: 142 },
-    { menu: '오답 괴물 격파 복습', clicks: 98 },
-    { menu: 'AI 말로 설명하기 대화', clicks: 76 },
-    { menu: '소원상자 선물 승인', clicks: 45 },
-    { menu: '추억 앨범 갤러리', clicks: 38 }
-  ]
-
-  let totalUsersCount = 28
-  let totalChildrenCount = 35
+  let topDreamJobs: { job: string; count: number }[] = []
+  let topWishes: { title: string; count: number }[] = []
+  let menuClicks: { menu: string; clicks: number }[] = []
+  let totalUsersCount = 0
+  let totalChildrenCount = 0
 
   try {
     const supabase = createClient()
 
+    const { count: usersCount } = await supabase.from('accounts').select('*', { count: 'exact', head: true })
+    if (usersCount !== null && usersCount !== undefined) totalUsersCount = usersCount
+
     const { data: childrenData } = await supabase.from('children').select('dream_job, actual_job')
-    if (childrenData && childrenData.length > 0) {
+    if (childrenData) {
       totalChildrenCount = childrenData.length
       const counts: Record<string, number> = {}
       childrenData.forEach((c: any) => {
         const job = c.dream_job || c.actual_job || '꿈나무'
         counts[job] = (counts[job] || 0) + 1
       })
-      const sorted = Object.entries(counts)
+      topDreamJobs = Object.entries(counts)
         .map(([job, count]) => ({ job, count }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 5)
-      if (sorted.length > 0) topDreamJobs = sorted
     }
 
     const { data: wishesData } = await supabase.from('wishes').select('title')
-    if (wishesData && wishesData.length > 0) {
+    if (wishesData) {
       const counts: Record<string, number> = {}
       wishesData.forEach((w: any) => {
         const title = w.title || '소원 선물'
         counts[title] = (counts[title] || 0) + 1
       })
-      const sorted = Object.entries(counts)
+      topWishes = Object.entries(counts)
         .map(([title, count]) => ({ title, count }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 5)
-      if (sorted.length > 0) topWishes = sorted
     }
   } catch (e) {
-    console.warn('Fetch admin stats fallback:', e)
+    console.error('Fetch admin stats error:', e)
   }
 
   if (typeof window !== 'undefined') {
@@ -186,94 +166,62 @@ export async function getCurrentUser(): Promise<UserAccount | null> {
       }
     }
   } catch (e) {
-    console.warn('Supabase auth check failed or not configured, using fallback:', e)
-  }
-
-  if (typeof window !== 'undefined') {
-    const stored = localStorage.getItem(LOCAL_STORAGE_KEY_SESSION)
-    if (stored) {
-      try {
-        return JSON.parse(stored)
-      } catch {
-        return null
-      }
-    }
+    console.error('Supabase auth user check error:', e)
   }
   return null
 }
 
 export async function loginWithEmail(email: string, password?: string): Promise<UserAccount> {
-  try {
-    const supabase = createClient()
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password: password || 'defaultpass123!'
-    })
-
-    if (!error && data.user) {
-      const userAcc: UserAccount = {
-        id: data.user.id,
-        email: data.user.email || email,
-        display_name: email.split('@')[0],
-        role: 'parent'
-      }
-      return userAcc
-    }
-  } catch (e) {
-    console.warn('Supabase auth signin fallback:', e)
-  }
-
-  const demoUser: UserAccount = {
-    id: 'demo-parent-uuid-001',
+  const supabase = createClient()
+  const { data, error } = await supabase.auth.signInWithPassword({
     email,
-    display_name: email.split('@')[0] || '부모님',
-    role: 'parent'
+    password: password || ''
+  })
+
+  if (error || !data.user) {
+    throw new Error(error?.message || '이메일 또는 비밀번호가 올바르지 않습니다.')
   }
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(LOCAL_STORAGE_KEY_SESSION, JSON.stringify(demoUser))
+
+  const { data: account } = await supabase
+    .from('accounts')
+    .select('*')
+    .eq('id', data.user.id)
+    .single()
+
+  return {
+    id: data.user.id,
+    email: data.user.email || email,
+    display_name: account?.display_name || email.split('@')[0],
+    role: account?.role || 'parent'
   }
-  return demoUser
 }
 
 export async function registerParentAccount(email: string, displayName: string, password?: string): Promise<UserAccount> {
-  try {
-    const supabase = createClient()
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password: password || 'defaultpass123!',
-      options: {
-        data: { display_name: displayName }
-      }
-    })
-
-    if (!error && data.user) {
-      await supabase.from('accounts').insert({
-        id: data.user.id,
-        display_name: displayName,
-        role: 'parent'
-      })
-
-      return {
-        id: data.user.id,
-        email: data.user.email || email,
-        display_name: displayName,
-        role: 'parent'
-      }
+  const supabase = createClient()
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password: password || '',
+    options: {
+      data: { display_name: displayName }
     }
-  } catch (e) {
-    console.warn('Supabase auth signup fallback:', e)
+  })
+
+  if (error || !data.user) {
+    throw new Error(error?.message || '회원가입 처리 중 오류가 발생했습니다.')
   }
 
-  const demoUser: UserAccount = {
-    id: `parent-${Date.now()}`,
-    email,
+  await supabase.from('accounts').upsert({
+    id: data.user.id,
+    display_name: displayName,
+    role: 'parent'
+  }, { onConflict: 'id' })
+
+  return {
+    id: data.user.id,
+    email: data.user.email || email,
     display_name: displayName,
     role: 'parent'
   }
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(LOCAL_STORAGE_KEY_SESSION, JSON.stringify(demoUser))
-  }
-  return demoUser
 }
 
 export async function logoutUser() {
@@ -281,20 +229,22 @@ export async function logoutUser() {
     const supabase = createClient()
     await supabase.auth.signOut()
   } catch (e) {
-    console.warn('Logout fallback:', e)
+    console.error('Logout error:', e)
   }
   if (typeof window !== 'undefined') {
     localStorage.removeItem(LOCAL_STORAGE_KEY_SESSION)
   }
 }
 
-// Supabase Auth 기반 children 프로필 조회
+// Supabase Auth 기반 children 프로필 Strict 조회
 export async function fetchChildrenProfiles(accountId: string): Promise<ChildProfile[]> {
+  if (!accountId) return []
   try {
     const supabase = createClient()
-
     const { data: { user } } = await supabase.auth.getUser()
     const targetAccountId = user ? user.id : accountId
+
+    if (!targetAccountId) return []
 
     const { data, error } = await supabase
       .from('children')
@@ -302,7 +252,7 @@ export async function fetchChildrenProfiles(accountId: string): Promise<ChildPro
       .eq('account_id', targetAccountId)
       .order('created_at', { ascending: false })
 
-    if (!error && data && data.length > 0) {
+    if (!error && data) {
       return data.map((item: any) => ({
         id: item.id,
         account_id: item.account_id,
@@ -315,10 +265,9 @@ export async function fetchChildrenProfiles(accountId: string): Promise<ChildPro
       }))
     }
   } catch (e) {
-    console.warn('Supabase fetch children fallback:', e)
+    console.error('Supabase fetch children error:', e)
   }
-
-  return getChildrenProfiles()
+  return []
 }
 
 export async function createChildProfile(

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import {
   getCurrentUser,
@@ -24,6 +25,7 @@ import {
 } from '@/lib/auth'
 
 export default function ParentDashboardPage() {
+  const router = useRouter()
   const [user, setUser] = useState<UserAccount | null>(null)
   const [children, setChildren] = useState<ChildProfile[]>([])
   const [selectedChildId, setSelectedChildIdState] = useState<string>('')
@@ -116,17 +118,18 @@ export default function ParentDashboardPage() {
   useEffect(() => {
     async function loadData() {
       const u = await getCurrentUser()
-      setUser(u)
-
-      if (u) {
-        await reloadChildren(u.id)
+      if (!u) {
+        router.push('/login')
+        return
       }
+      setUser(u)
+      await reloadChildren(u.id)
 
       const key = getUserApiKey()
       setHasApiKey(!!key)
     }
     loadData()
-  }, [])
+  }, [router])
 
   // 탭에서 자녀 선택 시
   const handleSelectChild = async (ch: ChildProfile) => {
