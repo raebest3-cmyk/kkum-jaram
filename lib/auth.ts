@@ -5,8 +5,9 @@ export interface ChildProfile {
   account_id: string
   nickname: string
   grade: number
-  dream_job: string
-  theme: string
+  dream_job?: string
+  actual_job?: string
+  theme?: string
   created_at?: string
 }
 
@@ -155,10 +156,7 @@ export async function logoutUser() {
   }
 }
 
-// ----------------------------------------------------
 // DB 기반 자녀 프로필 CRUD
-// ----------------------------------------------------
-
 export async function fetchChildrenProfiles(accountId: string): Promise<ChildProfile[]> {
   try {
     const supabase = createClient()
@@ -173,7 +171,8 @@ export async function fetchChildrenProfiles(accountId: string): Promise<ChildPro
         account_id: item.account_id,
         nickname: item.nickname,
         grade: item.grade,
-        dream_job: item.dream_job,
+        dream_job: item.dream_job || item.actual_job || '꿈나무 🌟',
+        actual_job: item.actual_job || item.dream_job || '꿈나무 🌟',
         theme: item.theme || (item.grade <= 6 ? 'elementary' : 'teen'),
         created_at: item.created_at
       }))
@@ -200,6 +199,7 @@ export async function createChildProfile(
     nickname,
     grade,
     dream_job: dreamJob,
+    actual_job: dreamJob,
     theme: grade <= 6 ? 'elementary' : 'teen',
     created_at: new Date().toISOString()
   }
@@ -213,6 +213,7 @@ export async function createChildProfile(
         nickname,
         grade,
         dream_job: dreamJob,
+        actual_job: dreamJob,
         theme: grade <= 6 ? 'elementary' : 'teen'
       })
       .select()
@@ -224,7 +225,8 @@ export async function createChildProfile(
         account_id: data.account_id,
         nickname: data.nickname,
         grade: data.grade,
-        dream_job: data.dream_job,
+        dream_job: data.dream_job || data.actual_job,
+        actual_job: data.actual_job || data.dream_job,
         theme: data.theme,
         created_at: data.created_at
       }
@@ -242,7 +244,6 @@ export async function createChildProfile(
     console.warn('Children DB insert fallback:', e)
   }
 
-  // 로컬 스토리지 보완 동기화
   if (typeof window !== 'undefined') {
     const existing = getChildrenProfiles()
     existing.push(createdProfile)
@@ -276,10 +277,6 @@ export function getChildrenProfiles(): ChildProfile[] {
   }
   return []
 }
-
-// ----------------------------------------------------
-// 포인트 & 소원 상자 DB CRUD
-// ----------------------------------------------------
 
 export async function fetchChildPoints(childId: string): Promise<number> {
   try {
@@ -377,10 +374,6 @@ function getLocalWishes(): WishItem[] {
   }
   return []
 }
-
-// ----------------------------------------------------
-// BYOK (API Key) 관리
-// ----------------------------------------------------
 
 export async function saveUserApiKey(accountId: string, apiKey: string) {
   try {
