@@ -207,7 +207,7 @@ export async function loginWithEmail(email: string, password?: string): Promise<
           .eq('id', data.user.id)
           .single()
 
-        const userRole = (account?.role as any) || (email.includes('admin') ? 'admin' : 'parent')
+        const userRole = (account?.role as any) || 'parent'
         const userAcc: UserAccount = {
           id: data.user.id,
           email: data.user.email || email,
@@ -224,12 +224,11 @@ export async function loginWithEmail(email: string, password?: string): Promise<
     }
   }
 
-  const isAdminEmail = email.includes('admin') || email === 'admin@kkumjaram.kr'
   const fallbackUser: UserAccount = {
-    id: isAdminEmail ? 'admin-dev-uuid-001' : `user-${Date.now()}`,
+    id: `user-${Date.now()}`,
     email,
     display_name: email.split('@')[0] || '사용자',
-    role: isAdminEmail ? 'admin' : 'parent'
+    role: 'parent'
   }
   if (typeof window !== 'undefined') {
     localStorage.setItem(LOCAL_STORAGE_KEY_SESSION, JSON.stringify(fallbackUser))
@@ -250,8 +249,8 @@ export async function registerParentAccount(email: string, displayName: string, 
       })
 
       if (!error && data?.user) {
-        const isAdminEmail = email.includes('admin') || email === 'admin@kkumjaram.kr'
-        const roleVal = isAdminEmail ? 'admin' : 'parent'
+        // 신규 계정 가입 시 무조건 기본 role='parent' 고정
+        const roleVal: 'parent' = 'parent'
         await supabase.from('accounts').upsert({
           id: data.user.id,
           display_name: displayName,
@@ -274,17 +273,71 @@ export async function registerParentAccount(email: string, displayName: string, 
     }
   }
 
-  const isAdminEmail = email.includes('admin') || email === 'admin@kkumjaram.kr'
+  // 신규 가입 시 기본 role='parent' 엄격 적용
   const fallbackUser: UserAccount = {
-    id: isAdminEmail ? 'admin-dev-uuid-001' : `user-${Date.now()}`,
+    id: `user-${Date.now()}`,
     email,
     display_name: displayName,
-    role: isAdminEmail ? 'admin' : 'parent'
+    role: 'parent'
   }
   if (typeof window !== 'undefined') {
     localStorage.setItem(LOCAL_STORAGE_KEY_SESSION, JSON.stringify(fallbackUser))
   }
   return fallbackUser
+}
+
+// 전체 가입자 계정 목록 조회 (관리자 전용)
+export async function fetchAllUserAccounts(): Promise<UserAccount[]> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('accounts')
+      .select('*')
+
+    if (!error && data && data.length > 0) {
+      return data.map((item: any) => ({
+        id: item.id,
+        email: item.email || `${item.display_name || 'user'}@kkumjaram.kr`,
+        display_name: item.display_name || '사용자',
+        role: (item.role as any) || 'parent'
+      }))
+    }
+  } catch (e) {
+    console.warn('Fetch all user accounts fallback:', e)
+  }
+
+  return [
+    { id: 'admin-dev-uuid-001', email: 'admin@kkumjaram.kr', display_name: '시스템 관리자', role: 'admin' },
+    { id: 'parent-demo-001', email: 'parent@kkumjaram.kr', display_name: '민우 엄마', role: 'parent' }
+  ]
+}
+
+// 회원 계정 권한(role: 'admin' | 'parent') 변경/승인 (관리자 전용)
+export async function updateUserAccountRole(userId: string, newRole: 'admin' | 'parent'): Promise<void> {
+  try {
+    const supabase = createClient()
+    await supabase
+      .from('accounts')
+      .update({ role: newRole })
+      .eq('id', userId)
+  } catch (e) {
+    console.warn('Update user account role fallback:', e)
+  }
+
+  if (typeof window !== 'undefined') {
+    const stored = localStorage.getItem(LOCAL_STORAGE_KEY_SESSION)
+    if (stored) {
+      try {
+        const user: UserAccount = JSON.parse(stored)
+        if (user.id === userId) {
+          user.role = newRole
+          localStorage.setItem(LOCAL_STORAGE_KEY_SESSION, JSON.stringify(user))
+        }
+      } catch (e) {
+        console.error(e)
+      }
+    }
+  }
 }
 
 export async function logoutUser() {
