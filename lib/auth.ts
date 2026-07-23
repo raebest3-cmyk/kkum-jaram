@@ -35,6 +35,18 @@ const LOCAL_STORAGE_KEY_CHILDREN = 'kkum_jaram_children'
 const LOCAL_STORAGE_KEY_SECRETS = 'kkum_jaram_byok'
 const LOCAL_STORAGE_KEY_WISHES = 'kkum_jaram_wishes'
 const LOCAL_STORAGE_KEY_POINTS = 'kkum_jaram_points'
+const LOCAL_STORAGE_KEY_SELECTED_CHILD = 'kkum_jaram_selected_child_id'
+
+export function getSelectedChildId(): string | null {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem(LOCAL_STORAGE_KEY_SELECTED_CHILD)
+}
+
+export function setSelectedChildId(childId: string): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(LOCAL_STORAGE_KEY_SELECTED_CHILD, childId)
+  }
+}
 
 // 현재 로그인 사용자 세션 조회
 export async function getCurrentUser(): Promise<UserAccount | null> {
@@ -210,7 +222,6 @@ export async function createChildProfile(
   try {
     const supabase = createClient()
 
-    // 1. accounts 테이블 부모 계정 레코드 보장 (외래키 제약조건 방지)
     if (accountId && !accountId.startsWith('parent-') && accountId !== 'demo-parent-uuid-001') {
       await supabase.from('accounts').upsert({
         id: accountId,
@@ -218,7 +229,6 @@ export async function createChildProfile(
       }, { onConflict: 'id' })
     }
 
-    // 2. children 테이블에 데이터 삽입 (actual_job 포함 시도 ➔ 실패 시 fallback 시도)
     let res = await supabase
       .from('children')
       .insert({
@@ -233,7 +243,6 @@ export async function createChildProfile(
       .single()
 
     if (res.error) {
-      // actual_job 컬럼 미존재 스키마 환경 대비 Fallback 쿼리
       res = await supabase
         .from('children')
         .insert({
@@ -262,7 +271,6 @@ export async function createChildProfile(
       console.warn('Supabase children insert error:', res.error)
     }
 
-    // 3. 소원상자 등록
     if (wishTitle && createdProfile.id) {
       await supabase.from('wishes').insert({
         child_id: createdProfile.id,
@@ -275,7 +283,6 @@ export async function createChildProfile(
     console.warn('Children DB insert fallback:', e)
   }
 
-  // 4. 로컬스토리지 보완 동기화 (목록 최상단 추가)
   if (typeof window !== 'undefined') {
     const existing = getChildrenProfiles()
     const isAlreadyIn = existing.some(item => item.id === createdProfile.id)
@@ -295,6 +302,8 @@ export async function createChildProfile(
       })
       localStorage.setItem(LOCAL_STORAGE_KEY_WISHES, JSON.stringify(wishes))
     }
+
+    setSelectedChildId(createdProfile.id)
   }
 
   return createdProfile
@@ -414,6 +423,10 @@ export async function deleteChildProfile(childId: string): Promise<void> {
     const wishes = getLocalWishes()
     const filteredWishes = wishes.filter((w) => w.child_id !== childId)
     localStorage.setItem(LOCAL_STORAGE_KEY_WISHES, JSON.stringify(filteredWishes))
+
+    if (getSelectedChildId() === childId && filtered.length > 0) {
+      setSelectedChildId(filtered[0].id)
+    }
   }
 }
 
@@ -522,10 +535,8 @@ export async function approveWishAndCreateAlbum(
   parentMessage?: string,
   redemptionType: string = '포인트 교환 🎁'
 ): Promise<number> {
-  // 1. 포인트 원장 차감 기록
   await addPointsLedger(childId, -deductPoints, `소원 선물 승인 차감 (${redemptionType})`)
 
-  // 2. wishes 테이블 UPDATE
   try {
     const supabase = createClient()
     let res = await supabase
@@ -540,7 +551,6 @@ export async function approveWishAndCreateAlbum(
       .eq('id', wishId)
 
     if (res.error) {
-      // fallback (parent_message 컬럼 미존재 스키마 대비)
       await supabase
         .from('wishes')
         .update({
@@ -554,7 +564,6 @@ export async function approveWishAndCreateAlbum(
     console.warn('Approve wish & album fallback:', e)
   }
 
-  // 3. 로컬 스토리지 동기화
   if (typeof window !== 'undefined') {
     const wishes = getLocalWishes()
     const updated = wishes.map((w) =>

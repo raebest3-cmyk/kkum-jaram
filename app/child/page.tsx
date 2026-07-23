@@ -11,6 +11,8 @@ import {
   fetchChildPoints,
   addPointsLedger,
   fetchAchievedWishes,
+  getSelectedChildId,
+  setSelectedChildId,
   ChildProfile,
   UserAccount,
   WishItem
@@ -19,7 +21,11 @@ import { getDailyMissionQuestions, QuestionItem } from '@/lib/questions'
 
 export default function ChildDashboardPage() {
   const [user, setUser] = useState<UserAccount | null>(null)
+  const [childrenList, setChildrenList] = useState<ChildProfile[]>([])
   const [child, setChild] = useState<ChildProfile | null>(null)
+
+  // 프로필 스위처 모달 상태
+  const [showProfileSwitcher, setShowProfileSwitcher] = useState<boolean>(false)
 
   // 포인트 상태 (DB 연동)
   const [points, setPoints] = useState<number>(120)
@@ -44,6 +50,17 @@ export default function ChildDashboardPage() {
   const [showSrsModal, setShowSrsModal] = useState<boolean>(false)
   const [showAiModal, setShowAiModal] = useState<boolean>(false)
 
+  const loadTargetChildData = async (targetChild: ChildProfile) => {
+    setChild(targetChild)
+    setSelectedChildId(targetChild.id)
+
+    const dbPoints = await fetchChildPoints(targetChild.id)
+    setPoints(dbPoints)
+
+    const achieved = await fetchAchievedWishes(targetChild.id)
+    setAchievedWishes(achieved)
+  }
+
   useEffect(() => {
     async function loadData() {
       const u = await getCurrentUser()
@@ -51,33 +68,34 @@ export default function ChildDashboardPage() {
 
       if (u) {
         const list = await fetchChildrenProfiles(u.id)
-        if (list.length > 0) {
-          const selectedChild = list[0]
-          setChild(selectedChild)
-          const dbPoints = await fetchChildPoints(selectedChild.id)
-          setPoints(dbPoints)
+        setChildrenList(list)
 
-          const achieved = await fetchAchievedWishes(selectedChild.id)
-          setAchievedWishes(achieved)
+        if (list.length > 0) {
+          const savedId = getSelectedChildId()
+          const found = list.find((c) => c.id === savedId)
+          const selected = found || list[0]
+          await loadTargetChildData(selected)
         } else {
-          setChild({
+          const fallbackChild = {
             id: 'child-demo',
             account_id: u.id,
             nickname: '수빈이',
             grade: 3,
             dream_job: '로봇 공학자 🤖',
             theme: 'elementary'
-          })
+          }
+          setChild(fallbackChild)
         }
       } else {
-        setChild({
+        const fallbackChild = {
           id: 'child-demo',
           account_id: 'demo',
           nickname: '수빈이',
           grade: 3,
           dream_job: '로봇 공학자 🤖',
           theme: 'elementary'
-        })
+        }
+        setChild(fallbackChild)
       }
 
       if (typeof window !== 'undefined') {
@@ -93,6 +111,12 @@ export default function ChildDashboardPage() {
     }
     loadData()
   }, [])
+
+  // 프로필 전환 선택 시
+  const handleSwitchChild = async (ch: ChildProfile) => {
+    await loadTargetChildData(ch)
+    setShowProfileSwitcher(false)
+  }
 
   // 학년별 맞춤 출제 함수 연동
   const handleStartMission = async () => {
@@ -160,7 +184,7 @@ export default function ChildDashboardPage() {
       <Navbar />
 
       <div className="flex-1 p-4 sm:p-8 max-w-6xl mx-auto w-full space-y-8">
-        {/* 동적 프로필 웰컴 카드 */}
+        {/* 동적 프로필 웰컴 카드 (프로필 스위처 모달 연동) */}
         <section className="relative overflow-hidden bg-white rounded-3xl p-6 sm:p-8 border border-amber-200/60 shadow-xl shadow-amber-900/5">
           <div className="absolute -top-6 -right-6 w-32 h-32 bg-amber-100/60 rounded-full blur-2xl pointer-events-none" />
           <div className="absolute -bottom-6 -left-6 w-32 h-32 bg-emerald-100/60 rounded-full blur-2xl pointer-events-none" />
@@ -169,7 +193,7 @@ export default function ChildDashboardPage() {
             <div className="flex items-center gap-5">
               <div className="relative">
                 <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-3xl bg-gradient-to-tr from-amber-300 via-yellow-200 to-emerald-200 flex items-center justify-center text-4xl shadow-md border-2 border-white ring-4 ring-amber-100">
-                  👧
+                  {grade <= 3 ? '👧' : '👦'}
                 </div>
               </div>
 
@@ -185,6 +209,17 @@ export default function ChildDashboardPage() {
                     <span>희망:</span>
                     <span>{dreamJob}</span>
                   </span>
+
+                  {/* 프로필 스위처 버튼 */}
+                  {childrenList.length > 1 && (
+                    <button
+                      onClick={() => setShowProfileSwitcher(true)}
+                      className="px-3 py-1 rounded-full bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-950 font-black text-xs border border-slate-300 transition-colors shadow-sm flex items-center gap-1"
+                    >
+                      <span>🔄</span>
+                      <span>자녀 바꾸기</span>
+                    </button>
+                  )}
                 </div>
 
                 <div className="mt-3 inline-flex items-center gap-2 bg-[#FFF8E7] text-[#B45309] border border-[#FDE68A] px-4 py-2 rounded-2xl text-xs font-bold shadow-sm">
@@ -199,7 +234,7 @@ export default function ChildDashboardPage() {
             {/* 보유 포인트 파스텔 젤리 뱃지 */}
             <div className="w-full md:w-auto bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200/80 px-6 py-4 rounded-3xl shadow-sm flex items-center justify-between md:justify-end gap-4">
               <div className="text-left md:text-right">
-                <p className="text-xs font-extrabold text-amber-700/80">나의 보물 포인트 (DB 연동)</p>
+                <p className="text-xs font-extrabold text-amber-700/80">{childName}의 보물 포인트</p>
                 <p className="text-2xl font-black text-amber-600 flex items-center gap-1.5 mt-0.5">
                   <span>🪙</span>
                   <span>{points} P</span>
@@ -218,7 +253,7 @@ export default function ChildDashboardPage() {
             <div>
               <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
                 <span>🎯</span>
-                <span>오늘의 맞춤 미션 ({grade}학년 레벨)</span>
+                <span>{childName}의 맞춤 미션 ({grade}학년 레벨)</span>
               </h2>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
                 버튼을 누르면 {grade}학년 맞춤 수학 문제 풀이가 시작됩니다!
@@ -290,7 +325,7 @@ export default function ChildDashboardPage() {
               </div>
             </div>
 
-            {/* 미션 3 (STT 연동) */}
+            {/* 미션 3 */}
             <div className="group relative bg-[#FFF8E7] rounded-3xl p-6 border-2 border-[#FFE8B3] shadow-lg shadow-amber-900/5 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
               <div>
                 <div className="flex justify-between items-center mb-4">
@@ -323,7 +358,7 @@ export default function ChildDashboardPage() {
           </div>
         </section>
 
-        {/* 성취 곡선 & 소원 퍼즐 (추억 앨범 갤러리 추가) */}
+        {/* 성취 곡선 & 소원 퍼즐 */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white rounded-3xl p-6 border border-amber-200/60 shadow-lg shadow-amber-900/5 flex flex-col justify-between">
             <div>
@@ -389,7 +424,7 @@ export default function ChildDashboardPage() {
               <div className="flex justify-between items-center mb-3">
                 <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
                   <span>🎁</span>
-                  <span>나의 첫 소원상자 퍼즐</span>
+                  <span>{childName}의 소원상자 퍼즐</span>
                 </h3>
                 <button
                   onClick={() => setShowAlbumModal(true)}
@@ -460,7 +495,57 @@ export default function ChildDashboardPage() {
         />
       )}
 
-      {/* 📸 추억 앨범 갤러리 모달 (아이 모드) */}
+      {/* 🔄 자녀 프로필 스위처 모달 */}
+      {showProfileSwitcher && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
+          <div className="w-full max-w-sm bg-[#FDFBF7] rounded-3xl border-2 border-amber-300 p-6 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b border-amber-200 pb-3">
+              <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                <span>🔄</span>
+                <span>자녀 프로필 선택</span>
+              </h3>
+              <button
+                onClick={() => setShowProfileSwitcher(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-xs"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {childrenList.map((item) => {
+                const isSelected = item.id === child?.id
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleSwitchChild(item)}
+                    className={`w-full p-4 rounded-2xl border text-left flex items-center justify-between transition-all ${
+                      isSelected
+                        ? 'bg-amber-100/80 border-amber-400 font-black text-amber-950 ring-2 ring-amber-300'
+                        : 'bg-white border-slate-200 hover:bg-amber-50 font-bold text-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{item.grade <= 3 ? '👧' : '👦'}</span>
+                      <div>
+                        <div className="text-sm font-black">{item.nickname}</div>
+                        <div className="text-xs text-slate-500">초등 {item.grade}학년 | {item.dream_job || '꿈나무'}</div>
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <span className="text-xs font-black text-amber-800 bg-amber-200 px-2.5 py-1 rounded-full">
+                        선택됨 ✓
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 📸 추억 앨범 갤러리 모달 */}
       {showAlbumModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
           <div className="w-full max-w-2xl bg-[#FDFBF7] rounded-3xl border-2 border-emerald-300 p-6 shadow-2xl space-y-5 max-h-[85vh] overflow-y-auto">

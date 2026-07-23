@@ -13,6 +13,8 @@ import {
   fetchWishes,
   fetchAchievedWishes,
   approveWishAndCreateAlbum,
+  getSelectedChildId,
+  setSelectedChildId,
   ChildProfile,
   UserAccount,
   WishItem,
@@ -22,6 +24,7 @@ import {
 export default function ParentDashboardPage() {
   const [user, setUser] = useState<UserAccount | null>(null)
   const [children, setChildren] = useState<ChildProfile[]>([])
+  const [selectedChildId, setSelectedChildIdState] = useState<string>('')
   const [hasApiKey, setHasApiKey] = useState<boolean>(false)
 
   // 소원 및 포인트 상태
@@ -59,22 +62,35 @@ export default function ParentDashboardPage() {
   const [editWishPoints, setEditWishPoints] = useState<number>(100)
   const [isSubmittingEdit, setIsSubmittingEdit] = useState<boolean>(false)
 
+  // 지정 자녀의 데이터 로드
+  const loadChildData = async (targetChild: ChildProfile) => {
+    const pts = await fetchChildPoints(targetChild.id)
+    setChildPoints(pts)
+
+    const wishList = await fetchWishes(targetChild.id)
+    setWishes(wishList)
+    if (wishList.length > 0 && wishList[0].status) {
+      setWishStatus(wishList[0].status as 'active' | 'achieved')
+    } else {
+      setWishStatus('active')
+    }
+
+    const achieved = await fetchAchievedWishes(targetChild.id)
+    setAchievedWishes(achieved)
+  }
+
   const reloadChildren = async (accountId: string) => {
     const list = await fetchChildrenProfiles(accountId)
     setChildren(list)
+
     if (list.length > 0) {
-      const childId = list[0].id
-      const pts = await fetchChildPoints(childId)
-      setChildPoints(pts)
+      const savedId = getSelectedChildId()
+      const found = list.find((c) => c.id === savedId)
+      const target = found || list[0]
 
-      const wishList = await fetchWishes(childId)
-      setWishes(wishList)
-      if (wishList.length > 0 && wishList[0].status) {
-        setWishStatus(wishList[0].status as 'active' | 'achieved')
-      }
-
-      const achieved = await fetchAchievedWishes(childId)
-      setAchievedWishes(achieved)
+      setSelectedChildIdState(target.id)
+      setSelectedChildId(target.id)
+      await loadChildData(target)
     }
   }
 
@@ -93,6 +109,13 @@ export default function ParentDashboardPage() {
     loadData()
   }, [])
 
+  // 탭에서 자녀 선택 시
+  const handleSelectChild = async (ch: ChildProfile) => {
+    setSelectedChildIdState(ch.id)
+    setSelectedChildId(ch.id)
+    await loadChildData(ch)
+  }
+
   // 인증사진 파일 선택 핸들러
   const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -105,7 +128,7 @@ export default function ParentDashboardPage() {
     }
   }
 
-  // 소원 승인 처리 핸들러 (차감 포인트 반영 및 추억 앨범 저장)
+  // 소원 승인 처리 핸들러
   const handleApproveWishSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (childPoints < deductPoints) {
@@ -113,16 +136,16 @@ export default function ParentDashboardPage() {
       return
     }
 
-    if (children.length === 0) return
+    const currentChild = children.find((c) => c.id === selectedChildId)
+    if (!currentChild) return
 
     setIsApproving(true)
     try {
-      const childId = children[0].id
       const wishId = wishes.length > 0 && wishes[0].id ? wishes[0].id : `wish-${Date.now()}`
 
       const updatedPoints = await approveWishAndCreateAlbum(
         wishId,
-        childId,
+        currentChild.id,
         deductPoints,
         proofImage,
         parentMessage.trim() || '소원 달성을 축하해요! 항상 응원해 ⭐',
@@ -133,8 +156,7 @@ export default function ParentDashboardPage() {
       setWishStatus('achieved')
       setShowApprovalModal(false)
 
-      // 추억 앨범 갱신
-      const userId = user?.id || 'demo-parent-uuid-[#001]'
+      const userId = user?.id || 'demo-parent-uuid-001'
       await reloadChildren(userId)
 
       alert('🎉 소원 선물 승인 및 추억 앨범 보관이 완료되었습니다!')
@@ -157,7 +179,7 @@ export default function ParentDashboardPage() {
     setIsSubmittingChild(true)
     try {
       const userId = user?.id || 'demo-parent-uuid-001'
-      await createChildProfile(
+      const created = await createChildProfile(
         userId,
         newNickname.trim(),
         newGrade,
@@ -167,6 +189,9 @@ export default function ParentDashboardPage() {
       )
 
       await reloadChildren(userId)
+      if (created) {
+        setSelectedChildIdState(created.id)
+      }
 
       setNewNickname('')
       setNewGrade(3)
@@ -247,9 +272,20 @@ export default function ParentDashboardPage() {
     }
   }
 
-  const firstChild = children.length > 0 ? children[0] : null
-  const childName = firstChild?.nickname || '수빈이'
-  const dreamJob = firstChild?.dream_job || '꿈나무 🌟'
+  // 선택된 자녀 동적 객체
+  const selectedChild = children.find((c) => c.id === selectedChildId) || (children.length > 0 ? children[0] : null)
+  const childName = selectedChild?.nickname || '수빈이'
+  const dreamJob = selectedChild?.dream_job || '꿈나무 🌟'
+  const currentGrade = selectedChild?.grade || 3
+
+  // 학년별 단원 바인딩 텍스트
+  const getGradeUnits = (g: number) => {
+    if (g === 4) return ['1. 큰 수와 각도', '2. 삼각형과 소수', '3. 분수의 덧셈과 뺄셈']
+    if (g === 5) return ['1. 약수와 배수', '2. 직육면체와 약분', '3. 분수와 소수의 곱셈']
+    if (g === 6) return ['1. 분수와 소수의 나눗셈', '2. 비와 비율', '3. 직육면체의 겉넓이와 부피']
+    return ['1. 세 자리 수의 덧셈·뺄셈', '2. 곱셈과 나눗셈 기초', '3. 분수의 크기 비교']
+  }
+  const units = getGradeUnits(currentGrade)
 
   return (
     <div className="min-h-screen bg-[#FAF8F5] text-slate-800 font-sans flex flex-col">
@@ -292,46 +328,83 @@ export default function ParentDashboardPage() {
           </div>
         </header>
 
+        {/* 🌟 다자녀 선택 탭 영역 (상단 성장 리포트 전면 탑재) */}
+        {children.length > 0 && (
+          <section className="bg-white rounded-2xl p-3 border border-amber-200/80 shadow-md flex items-center gap-2 overflow-x-auto">
+            <span className="text-xs font-black text-amber-900 px-3 py-1.5 bg-amber-100/80 rounded-xl shrink-0">
+              👶 자녀 데이터 선택:
+            </span>
+            <div className="flex items-center gap-2">
+              {children.map((ch) => {
+                const isSelected = ch.id === selectedChildId
+                return (
+                  <button
+                    key={ch.id}
+                    onClick={() => handleSelectChild(ch)}
+                    className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 shrink-0 ${
+                      isSelected
+                        ? 'bg-[#003087] text-[#C8A951] shadow-md scale-105 ring-2 ring-amber-300'
+                        : 'bg-[#FAF8F5] text-slate-700 hover:bg-amber-100 border border-slate-200'
+                    }`}
+                  >
+                    <span>{ch.grade <= 3 ? '👧' : '👦'}</span>
+                    <span>{ch.nickname}</span>
+                    <span className="opacity-80 text-[11px]">(초{ch.grade})</span>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        )}
+
         <main className="space-y-8">
-          {/* 1. 주간 학습 성취도 요약 */}
+          {/* 1. 선택한 자녀의 주간 학습 성취도 요약 */}
           <section className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
             <div className="bg-white rounded-3xl p-5 border border-amber-200/60 shadow-md flex flex-col justify-between">
-              <span className="text-xs font-extrabold text-slate-500">주간 풀이 문항 수</span>
+              <span className="text-xs font-extrabold text-slate-500">{childName}의 주간 풀이 문항</span>
               <div className="mt-2 flex items-baseline gap-1">
-                <span className="text-3xl font-black text-slate-900">42</span>
+                <span className="text-3xl font-black text-slate-900">
+                  {currentGrade === 3 ? '42' : currentGrade === 4 ? '56' : currentGrade === 5 ? '68' : '75'}
+                </span>
                 <span className="text-xs font-bold text-slate-500">문제</span>
               </div>
               <span className="text-[11px] font-bold text-emerald-600 mt-2">↑ 지난주 대비 +12문제</span>
             </div>
 
             <div className="bg-white rounded-3xl p-5 border border-amber-200/60 shadow-md flex flex-col justify-between">
-              <span className="text-xs font-extrabold text-slate-500">주간 평균 정답률</span>
+              <span className="text-xs font-extrabold text-slate-500">{childName}의 주간 정답률</span>
               <div className="mt-2 flex items-baseline gap-1">
-                <span className="text-3xl font-black text-emerald-600">85%</span>
+                <span className="text-3xl font-black text-emerald-600">
+                  {currentGrade === 3 ? '85%' : currentGrade === 4 ? '88%' : currentGrade === 5 ? '92%' : '80%'}
+                </span>
               </div>
               <span className="text-[11px] font-bold text-emerald-600 mt-2">⭐ 높은 이해도 유지 중</span>
             </div>
 
             <div className="bg-white rounded-3xl p-5 border border-amber-200/60 shadow-md flex flex-col justify-between">
-              <span className="text-xs font-extrabold text-slate-500">DB 실시간 보유 포인트</span>
+              <span className="text-xs font-extrabold text-slate-500">{childName}의 보유 포인트</span>
               <div className="mt-2 flex items-baseline gap-1">
                 <span className="text-3xl font-black text-amber-600">🪙 {childPoints}</span>
                 <span className="text-xs font-bold text-slate-500">P</span>
               </div>
-              <span className="text-[11px] font-bold text-amber-700 mt-2">소원 목표(500P) 달성</span>
+              <span className="text-[11px] font-bold text-amber-700 mt-2">
+                {childPoints >= 500 ? '소원 목표(500P) 달성' : '소원 목표 향해 진행 중'}
+              </span>
             </div>
 
             <div className="bg-white rounded-3xl p-5 border border-amber-200/60 shadow-md flex flex-col justify-between">
-              <span className="text-xs font-extrabold text-slate-500">주간 학습 시간</span>
+              <span className="text-xs font-extrabold text-slate-500">{childName}의 주간 학습시간</span>
               <div className="mt-2 flex items-baseline gap-1">
-                <span className="text-3xl font-black text-indigo-600">3.5</span>
+                <span className="text-3xl font-black text-indigo-600">
+                  {currentGrade === 3 ? '3.5' : currentGrade === 4 ? '4.2' : currentGrade === 5 ? '5.0' : '4.8'}
+                </span>
                 <span className="text-xs font-bold text-slate-500">시간</span>
               </div>
               <span className="text-[11px] font-bold text-indigo-600 mt-2">매일 꾸준한 자기주도학습</span>
             </div>
           </section>
 
-          {/* 2. 등록된 자녀 프로필 세션 */}
+          {/* 2. 등록된 자녀 프로필 관리 리스트 */}
           <section className="bg-white rounded-3xl p-6 sm:p-7 border border-amber-200/60 shadow-xl shadow-amber-900/5 space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
@@ -348,56 +421,74 @@ export default function ParentDashboardPage() {
 
             {children.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {children.map((ch) => (
-                  <div
-                    key={ch.id}
-                    className="bg-[#FAF8F5] rounded-2xl p-5 border border-amber-200/80 flex flex-col justify-between gap-3 shadow-sm hover:border-amber-300 transition-all"
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg font-black text-slate-900">{ch.nickname}</span>
-                          <span className="text-xs bg-[#003087] text-[#C8A951] px-2.5 py-0.5 rounded-full font-black">
-                            초등 {ch.grade}학년
-                          </span>
+                {children.map((ch) => {
+                  const isSelected = ch.id === selectedChildId
+                  return (
+                    <div
+                      key={ch.id}
+                      className={`rounded-2xl p-5 border flex flex-col justify-between gap-3 shadow-sm transition-all ${
+                        isSelected
+                          ? 'bg-[#FFFDF9] border-amber-400 ring-2 ring-amber-200'
+                          : 'bg-[#FAF8F5] border-amber-200/80 hover:border-amber-300'
+                      }`}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg font-black text-slate-900">{ch.nickname}</span>
+                            <span className="text-xs bg-[#003087] text-[#C8A951] px-2.5 py-0.5 rounded-full font-black">
+                              초등 {ch.grade}학년
+                            </span>
+                            {isSelected && (
+                              <span className="text-[11px] bg-emerald-500 text-white font-black px-2 py-0.5 rounded-full">
+                                선택됨 ✓
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-500 font-bold mt-1">
+                            희망: {ch.dream_job || '꿈나무 🌟'} | 보유 포인트: 🪙 {ch.id === selectedChildId ? childPoints : '조회 중'} P
+                          </p>
                         </div>
-                        <p className="text-xs text-slate-500 font-bold mt-1">
-                          희망: {ch.dream_job || '꿈나무 🌟'} | 보유 포인트: 🪙 {childPoints} P
-                        </p>
+
+                        {/* 수정 ✏️ / 삭제 🗑️ 액션 버튼 */}
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => handleOpenEditModal(ch)}
+                            title="프로필 수정"
+                            className="px-2.5 py-1 rounded-xl bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold transition-all shadow-sm flex items-center gap-1"
+                          >
+                            <span>✏️</span>
+                            <span>수정</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteChild(ch)}
+                            title="프로필 삭제"
+                            className="px-2.5 py-1 rounded-xl bg-white hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition-all shadow-sm flex items-center gap-1"
+                          >
+                            <span>🗑️</span>
+                            <span>삭제</span>
+                          </button>
+                        </div>
                       </div>
 
-                      {/* 수정 ✏️ / 삭제 🗑️ 액션 버튼 */}
-                      <div className="flex items-center gap-1.5">
+                      <div className="pt-2 border-t border-amber-200/50 flex justify-between items-center">
                         <button
-                          onClick={() => handleOpenEditModal(ch)}
-                          title="프로필 수정"
-                          className="px-2.5 py-1 rounded-xl bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold transition-all shadow-sm flex items-center gap-1"
+                          onClick={() => handleSelectChild(ch)}
+                          className="text-xs font-black text-amber-800 hover:underline"
                         >
-                          <span>✏️</span>
-                          <span>수정</span>
+                          {isSelected ? '현재 리포트 뷰 적용 중' : '이 자녀 리포트 보기 선택 →'}
                         </button>
-
-                        <button
-                          onClick={() => handleDeleteChild(ch)}
-                          title="프로필 삭제"
-                          className="px-2.5 py-1 rounded-xl bg-white hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition-all shadow-sm flex items-center gap-1"
+                        <Link
+                          href="/child"
+                          className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-400 text-amber-950 text-xs font-black transition-transform hover:scale-105 shadow-sm"
                         >
-                          <span>🗑️</span>
-                          <span>삭제</span>
-                        </button>
+                          학습 대시보드 뷰 →
+                        </Link>
                       </div>
                     </div>
-
-                    <div className="pt-2 border-t border-amber-200/50 flex justify-end">
-                      <Link
-                        href="/child"
-                        className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-400 text-amber-950 text-xs font-black transition-transform hover:scale-105 shadow-sm"
-                      >
-                        학습 대시보드 뷰 →
-                      </Link>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             ) : (
               <div className="text-center py-8 text-slate-500 text-sm font-bold space-y-3">
@@ -412,23 +503,23 @@ export default function ParentDashboardPage() {
             )}
           </section>
 
-          {/* 3. 단원별 약점 분석 & AI 성장 총평 */}
+          {/* 3. 선택 자녀 맞춤 단원별 약점 분석 & AI 성장 총평 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-white rounded-3xl p-6 sm:p-7 border border-amber-200/60 shadow-xl shadow-amber-900/5 space-y-5">
               <div className="flex justify-between items-center border-b border-slate-100 pb-4">
                 <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
                   <span>📊</span>
-                  <span>단원별 약점 개념 분석</span>
+                  <span>{childName}의 단원별 약점 개념 분석</span>
                 </h2>
                 <span className="text-xs font-bold bg-amber-100 text-amber-900 px-3 py-1 rounded-full">
-                  초등 3학년 수학
+                  초등 {currentGrade}학년 수학
                 </span>
               </div>
 
               <div className="space-y-4">
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs font-bold">
-                    <span className="text-slate-800">1. 세 자리 수의 덧셈·뺄셈</span>
+                    <span className="text-slate-800">{units[0]}</span>
                     <span className="text-emerald-600">85% (우수 ⭐)</span>
                   </div>
                   <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden p-0.5 border border-slate-200">
@@ -438,27 +529,27 @@ export default function ParentDashboardPage() {
 
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs font-bold">
-                    <span className="text-slate-800">2. 곱셈과 나눗셈 기초</span>
-                    <span className="text-amber-600">60% (보통)</span>
+                    <span className="text-slate-800">{units[1]}</span>
+                    <span className="text-amber-600">65% (보통)</span>
                   </div>
                   <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden p-0.5 border border-slate-200">
-                    <div className="bg-gradient-to-r from-amber-400 to-orange-400 h-full rounded-full w-[60%]" />
+                    <div className="bg-gradient-to-r from-amber-400 to-orange-400 h-full rounded-full w-[65%]" />
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs font-bold">
-                    <span className="text-slate-800">3. 분수의 크기 비교</span>
-                    <span className="text-rose-600">40% (약점 집중 복습 필요 ⚠️)</span>
+                    <span className="text-slate-800">{units[2]}</span>
+                    <span className="text-rose-600">45% (약점 집중 복습 필요 ⚠️)</span>
                   </div>
                   <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden p-0.5 border border-slate-200">
-                    <div className="bg-gradient-to-r from-rose-400 to-pink-500 h-full rounded-full w-[40%]" />
+                    <div className="bg-gradient-to-r from-rose-400 to-pink-500 h-full rounded-full w-[45%]" />
                   </div>
                 </div>
               </div>
 
               <div className="bg-rose-50/80 rounded-2xl p-4 border border-rose-200 text-xs text-rose-900 font-bold leading-relaxed">
-                💡 <strong>약점 분석 처방:</strong> {childName} 어린이는 단위분수 크기 비교(1/4 과 1/6)에서 분모가 클수록 작아지는 원리를 더 다질 필요가 있습니다.
+                💡 <strong>약점 분석 처방:</strong> {childName} 어린이는 {units[2]} 개념의 기초 원리를 더 다질 필요가 있습니다.
               </div>
             </div>
 
@@ -467,7 +558,7 @@ export default function ParentDashboardPage() {
                 <div className="flex justify-between items-center border-b border-slate-100 pb-4">
                   <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
                     <span>📝</span>
-                    <span>AI 주간 성장 총평 리포트</span>
+                    <span>{childName}의 AI 주간 성장 총평</span>
                   </h2>
                   <span className="text-xs font-bold bg-emerald-100 text-emerald-900 px-3 py-1 rounded-full">
                     이번 주 리포트
@@ -476,10 +567,10 @@ export default function ParentDashboardPage() {
 
                 <div className="mt-4 bg-[#FFF8E7] rounded-2xl p-5 border border-[#FDE68A] space-y-3 text-xs sm:text-sm text-slate-800 font-bold leading-relaxed">
                   <p className="text-amber-950">
-                    "{childName} 어린이는 이번 주 <strong>세 자리 수 덧셈·뺄셈</strong> 단원을 높은 정답률로 완벽히 마스터하였습니다!"
+                    "{childName} 어린이는 초등 {currentGrade}학년 과정 중 <strong>{units[0]}</strong> 단원을 높은 정답률로 완벽히 마스터하였습니다!"
                   </p>
                   <p className="text-slate-700 font-medium">
-                    특히 <strong>AI 말로 설명하기 미션</strong>에서 {dreamJob}의 꿈에 어울리는 논리적인 언어로 나눗셈 원리를 설명하는 메타인지 능력이 매우 뛰어납니다.
+                    특히 <strong>AI 말로 설명하기 미션</strong>에서 {dreamJob}의 꿈에 어울리는 논리적인 언어로 수학 문제 원리를 설명하는 메타인지 능력이 매우 뛰어납니다.
                   </p>
                 </div>
               </div>
@@ -491,13 +582,13 @@ export default function ParentDashboardPage() {
             </div>
           </div>
 
-          {/* 4. 소원상자 승인 & BYOK 관리 */}
+          {/* 4. 선택 자녀 소원상자 승인 & BYOK 관리 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-white rounded-3xl p-6 border border-amber-200/60 shadow-lg shadow-amber-900/5 space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
                   <span>🎁</span>
-                  <span>소원상자 승인 & 포인트 정산 (DB)</span>
+                  <span>{childName}의 소원상자 승인 & 포인트 정산 (DB)</span>
                 </h3>
                 <span
                   className={`text-xs px-3 py-1 rounded-full font-black ${
@@ -529,7 +620,7 @@ export default function ParentDashboardPage() {
                     onClick={() => setShowApprovalModal(true)}
                     className="w-full py-3 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-500 hover:to-yellow-600 text-amber-950 font-black text-xs shadow-md hover:scale-[1.02] transition-all"
                   >
-                    🎁 소원 선물 승인 및 포인트 정산하기
+                    🎁 {childName}의 소원 선물 승인 및 정산하기
                   </button>
                 ) : (
                   <div className="w-full flex justify-between items-center p-3 text-xs font-black text-emerald-800 bg-emerald-50 rounded-2xl border border-emerald-200">
@@ -581,7 +672,7 @@ export default function ParentDashboardPage() {
             <div className="flex justify-between items-center border-b border-amber-200 pb-3">
               <div className="flex items-center gap-2">
                 <span className="text-2xl">🎁</span>
-                <h3 className="text-lg font-black text-slate-900">소원상자 선물 승인 & 추억 앨범</h3>
+                <h3 className="text-lg font-black text-slate-900">{childName}의 소원상자 선물 승인</h3>
               </div>
               <button
                 onClick={() => setShowApprovalModal(false)}
@@ -592,7 +683,6 @@ export default function ParentDashboardPage() {
             </div>
 
             <form onSubmit={handleApproveWishSubmit} className="space-y-4 text-xs font-bold">
-              {/* 차감 포인트 설정 & 실시간 계산 */}
               <div className="bg-amber-50/80 p-4 rounded-2xl border border-amber-200 space-y-3">
                 <div className="flex justify-between items-center text-amber-900 font-black">
                   <span>신청 소원 선물:</span>
@@ -622,7 +712,6 @@ export default function ParentDashboardPage() {
                 </div>
               </div>
 
-              {/* 정산 유형 선택 */}
               <div>
                 <label className="block text-slate-700 mb-1">정산 유형 선택</label>
                 <select
@@ -637,19 +726,17 @@ export default function ParentDashboardPage() {
                 </select>
               </div>
 
-              {/* 부모 축하 메시지 */}
               <div>
                 <label className="block text-slate-700 mb-1">부모님의 축하 메시지 (추억 앨범 저장)</label>
                 <textarea
                   rows={2}
-                  placeholder="예: 수빈아, 열심히 문제를 풀어 소원을 이룬 것을 축하해! 사랑해 ❤️"
+                  placeholder={`예: ${childName}아, 열심히 문제를 풀어 소원을 이룬 것을 축하해! 사랑해 ❤️`}
                   value={parentMessage}
                   onChange={(e) => setParentMessage(e.target.value)}
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-slate-900 font-bold focus:outline-none focus:border-amber-400"
                 />
               </div>
 
-              {/* 선물 인증사진 업로드 */}
               <div>
                 <label className="block text-slate-700 mb-1">📸 선물 전달 인증사진 첨부 (선택)</label>
                 <input
@@ -902,7 +989,7 @@ export default function ParentDashboardPage() {
             <div className="flex justify-between items-center border-b border-emerald-200 pb-3">
               <div className="flex items-center gap-2">
                 <span className="text-2xl">📸</span>
-                <h3 className="text-lg font-black text-emerald-950">가족 꿈 추억 앨범 갤러리</h3>
+                <h3 className="text-lg font-black text-emerald-950">{childName}의 추억 앨범 갤러리</h3>
               </div>
               <button
                 onClick={() => setShowAlbumModal(false)}
@@ -959,7 +1046,7 @@ export default function ParentDashboardPage() {
                 <div className="w-16 h-16 rounded-3xl bg-emerald-100 flex items-center justify-center text-3xl mx-auto border border-emerald-200">
                   📸
                 </div>
-                <p className="text-sm font-bold">아직 보관된 소원 달성 추억 앨범이 없습니다.</p>
+                <p className="text-sm font-bold">아직 {childName}의 보관된 소원 달성 추억 앨범이 없습니다.</p>
                 <p className="text-xs text-slate-400">
                   아이가 500포인트를 모아 소원을 달성하고 부모가 승인하면 여기에 예쁜 인증샷 갤러리가 보관됩니다!
                 </p>
