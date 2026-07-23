@@ -7,6 +7,8 @@ import {
   getCurrentUser,
   fetchChildrenProfiles,
   createChildProfile,
+  updateChildProfile,
+  deleteChildProfile,
   fetchChildPoints,
   addPointsLedger,
   fetchWishes,
@@ -36,6 +38,15 @@ export default function ParentDashboardPage() {
   const [newWishTitle, setNewWishTitle] = useState('')
   const [newWishPoints, setNewWishPoints] = useState<number>(100)
   const [isSubmittingChild, setIsSubmittingChild] = useState<boolean>(false)
+
+  // 자녀 프로필 수정 모달 상태
+  const [editingChild, setEditingChild] = useState<ChildProfile | null>(null)
+  const [editNickname, setEditNickname] = useState('')
+  const [editGrade, setEditGrade] = useState<number>(3)
+  const [editDreamJob, setEditDreamJob] = useState('')
+  const [editWishTitle, setEditWishTitle] = useState('')
+  const [editWishPoints, setEditWishPoints] = useState<number>(100)
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState<boolean>(false)
 
   const reloadChildren = async (accountId: string) => {
     const list = await fetchChildrenProfiles(accountId)
@@ -89,7 +100,7 @@ export default function ParentDashboardPage() {
     alert('🎉 소원이 성공적으로 승인되었습니다! 선물 인증샷이 가족 꿈 앨범에 보관됩니다.')
   }
 
-  // 자녀 추가 처리 핸들러 (DB 저장 & 즉시 실시간 동기화)
+  // 자녀 추가 핸들러
   const handleAddChildSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newNickname.trim()) {
@@ -109,7 +120,6 @@ export default function ParentDashboardPage() {
         newWishPoints || 100
       )
 
-      // 성공 시 대시보드 리로드 및 폼 초기화
       await reloadChildren(userId)
 
       setNewNickname('')
@@ -125,6 +135,70 @@ export default function ParentDashboardPage() {
       alert('자녀 프로필 저장 중 오류가 발생했습니다.')
     } finally {
       setIsSubmittingChild(false)
+    }
+  }
+
+  // 자녀 수정 클릭
+  const handleOpenEditModal = async (ch: ChildProfile) => {
+    setEditingChild(ch)
+    setEditNickname(ch.nickname)
+    setEditGrade(ch.grade)
+    setEditDreamJob(ch.dream_job || ch.actual_job || '')
+    
+    // 소원 정보 로드
+    const wishList = await fetchWishes(ch.id)
+    if (wishList.length > 0) {
+      setEditWishTitle(wishList[0].title || '')
+      setEditWishPoints(wishList[0].target_points || 100)
+    } else {
+      setEditWishTitle('')
+      setEditWishPoints(100)
+    }
+  }
+
+  // 자녀 수정 제출 핸들러
+  const handleEditChildSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingChild || !editNickname.trim()) return
+
+    setIsSubmittingEdit(true)
+    try {
+      await updateChildProfile(
+        editingChild.id,
+        editNickname.trim(),
+        editGrade,
+        editDreamJob.trim() || '꿈나무 🌟',
+        editWishTitle.trim() || '소원 선물 상자 🎁',
+        editWishPoints || 100
+      )
+
+      const userId = user?.id || 'demo-parent-uuid-001'
+      await reloadChildren(userId)
+
+      setEditingChild(null)
+      alert('🎉 자녀 프로필이 성공적으로 수정되었습니다!')
+    } catch (err) {
+      console.error(err)
+      alert('자녀 프로필 수정 중 오류가 발생했습니다.')
+    } finally {
+      setIsSubmittingEdit(false)
+    }
+  }
+
+  // 자녀 삭제 클릭
+  const handleDeleteChild = async (ch: ChildProfile) => {
+    if (!window.confirm(`정말로 '${ch.nickname}' 자녀 프로필을 삭제하시겠습니까?\n(등록된 학습 풀이 기록 및 소원 정보가 함께 삭제됩니다)`)) {
+      return
+    }
+
+    try {
+      await deleteChildProfile(ch.id)
+      const userId = user?.id || 'demo-parent-uuid-001'
+      await reloadChildren(userId)
+      alert(`🗑️ '${ch.nickname}' 자녀 프로필이 삭제되었습니다.`)
+    } catch (err) {
+      console.error(err)
+      alert('삭제 중 오류가 발생했습니다.')
     }
   }
 
@@ -204,7 +278,7 @@ export default function ParentDashboardPage() {
             </div>
           </section>
 
-          {/* 2. 등록된 자녀 프로필 세션 (동적 바인딩) */}
+          {/* 2. 등록된 자녀 프로필 세션 (수정 / 삭제 기능 탑재) */}
           <section className="bg-white rounded-3xl p-6 sm:p-7 border border-amber-200/60 shadow-xl shadow-amber-900/5 space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
@@ -224,26 +298,51 @@ export default function ParentDashboardPage() {
                 {children.map((ch) => (
                   <div
                     key={ch.id}
-                    className="bg-[#FAF8F5] rounded-2xl p-5 border border-amber-200/80 flex justify-between items-center"
+                    className="bg-[#FAF8F5] rounded-2xl p-5 border border-amber-200/80 flex flex-col justify-between gap-3 shadow-sm hover:border-amber-300 transition-all"
                   >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg font-black text-slate-900">{ch.nickname}</span>
-                        <span className="text-xs bg-[#003087] text-[#C8A951] px-2.5 py-0.5 rounded-full font-black">
-                          초등 {ch.grade}학년
-                        </span>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg font-black text-slate-900">{ch.nickname}</span>
+                          <span className="text-xs bg-[#003087] text-[#C8A951] px-2.5 py-0.5 rounded-full font-black">
+                            초등 {ch.grade}학년
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 font-bold mt-1">
+                          희망: {ch.dream_job || '꿈나무 🌟'} | 보유 포인트: 🪙 {childPoints} P
+                        </p>
                       </div>
-                      <p className="text-xs text-slate-500 font-bold mt-1">
-                        희망: {ch.dream_job || '꿈나무 🌟'} | 보유 포인트: 🪙 {childPoints} P
-                      </p>
+
+                      {/* 수정 ✏️ / 삭제 🗑️ 액션 버튼 */}
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleOpenEditModal(ch)}
+                          title="프로필 수정"
+                          className="px-2.5 py-1 rounded-xl bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold transition-all shadow-sm flex items-center gap-1"
+                        >
+                          <span>✏️</span>
+                          <span>수정</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleDeleteChild(ch)}
+                          title="프로필 삭제"
+                          className="px-2.5 py-1 rounded-xl bg-white hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition-all shadow-sm flex items-center gap-1"
+                        >
+                          <span>🗑️</span>
+                          <span>삭제</span>
+                        </button>
+                      </div>
                     </div>
 
-                    <Link
-                      href="/child"
-                      className="px-3.5 py-2 rounded-xl bg-white hover:bg-amber-100 text-xs font-black text-amber-900 border border-amber-300 transition-colors shadow-sm"
-                    >
-                      학습 대시보드 뷰 →
-                    </Link>
+                    <div className="pt-2 border-t border-amber-200/50 flex justify-end">
+                      <Link
+                        href="/child"
+                        className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-400 text-amber-950 text-xs font-black transition-transform hover:scale-105 shadow-sm"
+                      >
+                        학습 대시보드 뷰 →
+                      </Link>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -449,7 +548,7 @@ export default function ParentDashboardPage() {
               </div>
 
               <div>
-                <label className="block text-slate-700 mb-1">학년 선택</label>
+                <label className="block text-slate-700 mb-1">학년 선택 (초1 ~ 초6)</label>
                 <select
                   value={newGrade}
                   onChange={(e) => setNewGrade(Number(e.target.value))}
@@ -515,6 +614,108 @@ export default function ParentDashboardPage() {
                   className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 text-amber-950 font-black text-xs shadow-md hover:scale-105 transition-transform disabled:opacity-50"
                 >
                   {isSubmittingChild ? 'DB 저장 중...' : '🌱 자녀 프로필 DB 저장하기'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 자녀 프로필 수정 모달 */}
+      {editingChild && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
+          <div className="w-full max-w-lg bg-[#FDFBF7] rounded-3xl border-2 border-amber-300 p-6 shadow-2xl space-y-5">
+            <div className="flex justify-between items-center border-b border-amber-200 pb-3">
+              <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                <span>✏️</span>
+                <span>자녀 프로필 정보 수정 (DB 연동)</span>
+              </h3>
+              <button
+                onClick={() => setEditingChild(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-xs"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleEditChildSubmit} className="space-y-4 text-xs font-bold">
+              <div>
+                <label className="block text-slate-700 mb-1">
+                  아이 별명 <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editNickname}
+                  onChange={(e) => setEditNickname(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-slate-900 font-bold focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 mb-1">학년 변경</label>
+                <select
+                  value={editGrade}
+                  onChange={(e) => setEditGrade(Number(e.target.value))}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-slate-900 font-bold focus:outline-none focus:border-amber-400"
+                >
+                  <option value={1}>초등학교 1학년</option>
+                  <option value={2}>초등학교 2학년</option>
+                  <option value={3}>초등학교 3학년</option>
+                  <option value={4}>초등학교 4학년</option>
+                  <option value={5}>초등학교 5학년</option>
+                  <option value={6}>초등학교 6학년</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 mb-1">장래희망 / 관심사</label>
+                <input
+                  type="text"
+                  value={editDreamJob}
+                  onChange={(e) => setEditDreamJob(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-slate-900 font-bold focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div className="pt-2 border-t border-slate-200 space-y-3">
+                <label className="block text-amber-900 font-black">도전 소원 선물 수정</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="col-span-2">
+                    <input
+                      type="text"
+                      value={editWishTitle}
+                      onChange={(e) => setEditWishTitle(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 text-xs font-bold"
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="number"
+                      min={10}
+                      max={1000}
+                      value={editWishPoints}
+                      onChange={(e) => setEditWishPoints(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 text-xs font-bold"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setEditingChild(null)}
+                  className="px-5 py-2.5 rounded-2xl bg-slate-100 text-slate-600 text-xs font-bold hover:bg-slate-200"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingEdit}
+                  className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 text-amber-950 font-black text-xs shadow-md hover:scale-105 transition-transform disabled:opacity-50"
+                >
+                  {isSubmittingEdit ? '수정 저장 중...' : '✏️ 프로필 정보 수정 완료'}
                 </button>
               </div>
             </form>

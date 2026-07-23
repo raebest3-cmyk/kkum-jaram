@@ -298,6 +298,123 @@ export async function createChildProfile(
   return createdProfile
 }
 
+export async function updateChildProfile(
+  childId: string,
+  nickname: string,
+  grade: number,
+  dreamJob: string,
+  wishTitle?: string,
+  wishTargetPoints: number = 100
+): Promise<void> {
+  try {
+    const supabase = createClient()
+
+    let res = await supabase
+      .from('children')
+      .update({
+        nickname,
+        grade,
+        dream_job: dreamJob,
+        actual_job: dreamJob,
+        theme: grade <= 6 ? 'elementary' : 'teen'
+      })
+      .eq('id', childId)
+
+    if (res.error) {
+      await supabase
+        .from('children')
+        .update({
+          nickname,
+          grade,
+          dream_job: dreamJob,
+          theme: grade <= 6 ? 'elementary' : 'teen'
+        })
+        .eq('id', childId)
+    }
+
+    if (wishTitle) {
+      const { data: existingWishes } = await supabase
+        .from('wishes')
+        .select('*')
+        .eq('child_id', childId)
+        .eq('status', 'active')
+
+      if (existingWishes && existingWishes.length > 0) {
+        await supabase
+          .from('wishes')
+          .update({
+            title: wishTitle,
+            target_points: wishTargetPoints
+          })
+          .eq('id', existingWishes[0].id)
+      } else {
+        await supabase.from('wishes').insert({
+          child_id: childId,
+          title: wishTitle,
+          target_points: wishTargetPoints,
+          status: 'active'
+        })
+      }
+    }
+  } catch (e) {
+    console.warn('Update child profile fallback:', e)
+  }
+
+  if (typeof window !== 'undefined') {
+    const existing = getChildrenProfiles()
+    const updated = existing.map((item) =>
+      item.id === childId
+        ? {
+            ...item,
+            nickname,
+            grade,
+            dream_job: dreamJob,
+            actual_job: dreamJob,
+            theme: grade <= 6 ? 'elementary' : 'teen'
+          }
+        : item
+    )
+    localStorage.setItem(LOCAL_STORAGE_KEY_CHILDREN, JSON.stringify(updated))
+
+    if (wishTitle) {
+      const wishes = getLocalWishes()
+      const wishIdx = wishes.findIndex((w) => w.child_id === childId && w.status === 'active')
+      if (wishIdx >= 0) {
+        wishes[wishIdx].title = wishTitle
+        wishes[wishIdx].target_points = wishTargetPoints
+      } else {
+        wishes.unshift({
+          id: `wish-${Date.now()}`,
+          child_id: childId,
+          title: wishTitle,
+          target_points: wishTargetPoints,
+          status: 'active'
+        })
+      }
+      localStorage.setItem(LOCAL_STORAGE_KEY_WISHES, JSON.stringify(wishes))
+    }
+  }
+}
+
+export async function deleteChildProfile(childId: string): Promise<void> {
+  try {
+    const supabase = createClient()
+    await supabase.from('children').delete().eq('id', childId)
+  } catch (e) {
+    console.warn('Delete child profile fallback:', e)
+  }
+
+  if (typeof window !== 'undefined') {
+    const existing = getChildrenProfiles()
+    const filtered = existing.filter((item) => item.id !== childId)
+    localStorage.setItem(LOCAL_STORAGE_KEY_CHILDREN, JSON.stringify(filtered))
+
+    const wishes = getLocalWishes()
+    const filteredWishes = wishes.filter((w) => w.child_id !== childId)
+    localStorage.setItem(LOCAL_STORAGE_KEY_WISHES, JSON.stringify(filteredWishes))
+  }
+}
+
 export function getChildrenProfiles(): ChildProfile[] {
   if (typeof window === 'undefined') return []
   const stored = localStorage.getItem(LOCAL_STORAGE_KEY_CHILDREN)
