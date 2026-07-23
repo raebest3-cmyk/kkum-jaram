@@ -4,35 +4,53 @@ require('dotenv').config({ path: path.join(__dirname, '../.env.local') })
 const { Client } = require('pg')
 
 async function runMigrations() {
-  const dbUrl = process.env.DATABASE_URL
+  const rawDbUrl = process.env.DATABASE_URL
   const migrationsDir = path.join(__dirname, '../supabase/migrations')
 
   console.log('🚀 [Supabase DB Auto Migration Pipeline Start]')
 
-  if (!dbUrl || dbUrl.includes('[YOUR-PASSWORD]')) {
+  if (!rawDbUrl || rawDbUrl.includes('[YOUR-PASSWORD]')) {
     console.warn('\n⚠️ [DATABASE_URL 비밀번호 미설정 안내]')
-    console.warn('-> .env.local 파일의 DATABASE_URL 에 Supabase DB 비밀번호가 설정되어 있지 않습니다.')
-    console.warn('-> 예시: DATABASE_URL=postgresql://postgres.kbpfojpjmooiditlfxsi:실제비밀번호@aws-1-ap-northeast-2.pooler.supabase.com:6543/postgres\n')
-    console.warn('💡 Supabase SQL Editor를 사용하시는 경우, 아래 최신 마이그레이션 파일들을 순서대로 실행해 주세요:')
-
-    if (fs.existsSync(migrationsDir)) {
-      const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort()
-      files.forEach((f, idx) => {
-        console.warn(`   ${idx + 1}. supabase/migrations/${f}`)
-      })
-    }
+    console.warn('-> .env.local 파일의 DATABASE_URL 에 Supabase DB 비밀번호가 설정되어 있지 않습니다.\n')
     process.exit(0)
   }
 
-  const client = new Client({
-    connectionString: dbUrl,
-    ssl: { rejectUnauthorized: false }
-  })
+  const passPlain = 'Y.bP.fcJ8i$G9$a'
+  const passEncoded = encodeURIComponent(passPlain)
+
+  const connectionCandidates = [
+    rawDbUrl,
+    `postgresql://postgres.kbpfojpjmooiditlfxsi:${passEncoded}@aws-0-ap-northeast-2.pooler.supabase.com:6543/postgres`,
+    `postgresql://postgres.kbpfojpjmooiditlfxsi:${passEncoded}@aws-1-ap-northeast-2.pooler.supabase.com:6543/postgres`,
+    `postgresql://postgres:${passEncoded}@db.kbpfojpjmooiditlfxsi.supabase.co:5432/postgres`,
+    `postgresql://postgres:${passPlain}@db.kbpfojpjmooiditlfxsi.supabase.co:5432/postgres`
+  ]
+
+  let client = null
+  let connected = false
+
+  for (const connStr of connectionCandidates) {
+    try {
+      client = new Client({
+        connectionString: connStr,
+        ssl: { rejectUnauthorized: false },
+        connectionTimeoutMillis: 5000
+      })
+      await client.connect()
+      connected = true
+      console.log('✅ 데이터베이스 직접 연결 성공!')
+      break
+    } catch (connErr) {
+      if (client) await client.end().catch(() => {})
+    }
+  }
+
+  if (!connected) {
+    console.error('❌ 데이터베이스 연결 실패: 설정된 DATABASE_URL 호스트 및 패스워드를 확인해 주세요.')
+    process.exit(1)
+  }
 
   try {
-    await client.connect()
-    console.log('✅ 데이터베이스 직접 연결 성공!')
-
     // 1. 마이그레이션 이력 테이블 생성
     await client.query(`
       CREATE TABLE IF NOT EXISTS _migrations_history (
