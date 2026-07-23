@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -25,7 +27,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col">
-      {/* ⚡ 관리자 포털 전용 독립 다크 헤더 */}
+      {/* ⚡ 관리자 포털 전용 독립 다크 헤더 (일반 Header 완벽 분리) */}
       <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-40 px-4 sm:px-8 py-3.5 flex justify-between items-center shadow-md">
         <div className="flex items-center gap-3">
           <Link href="/admin" className="flex items-center gap-2 font-black text-lg sm:text-xl text-white tracking-tight hover:opacity-90">
