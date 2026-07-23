@@ -306,19 +306,22 @@ export default function MissionModal({ questions, childName, onClose }: MissionM
               </div>
               <h3 className="text-lg font-black text-slate-900">제한시간(60초) 초과!</h3>
               <p className="text-xs text-slate-600 font-bold leading-relaxed">
-                시간이 모두 지나갔습니다. 다음 문제로 이동하거나 AI 해설 힌트를 확인해 보세요!
+                시간 초과! 다음 문제로 이동하거나 AI 힌트를 확인해 보세요.
               </p>
 
               <div className="flex justify-center gap-2 pt-2">
                 <button
-                  onClick={() => setShowAiDiagnostic(true)}
-                  className="px-4 py-2 rounded-xl bg-amber-100 text-amber-950 font-black text-xs border border-amber-300"
+                  onClick={() => {
+                    setShowTimeoutModal(false)
+                    setShowAiDiagnostic(true)
+                  }}
+                  className="px-4 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-950 font-black text-xs border border-amber-300 shadow-sm"
                 >
                   💡 AI 힌트 보기
                 </button>
                 <button
                   onClick={handleNext}
-                  className="px-5 py-2 rounded-xl bg-rose-500 text-white font-black text-xs shadow-md"
+                  className="px-5 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-black text-xs shadow-md"
                 >
                   다음 문제로 이동 →
                 </button>

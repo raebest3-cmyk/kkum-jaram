@@ -234,13 +234,13 @@ export default function SrsReviewModal({ childName, onClose }: SrsReviewModalPro
               </div>
               <h3 className="text-lg font-black text-slate-900">제한시간(60초) 초과!</h3>
               <p className="text-xs text-slate-600 font-bold leading-relaxed">
-                시간이 지나 다음 문제로 이동하거나 다시 도전하실 수 있습니다.
+                시간 초과! 다음 문제로 이동하거나 복습 힌트를 확인해 보세요.
               </p>
 
               <div className="flex justify-center gap-2 pt-2">
                 <button
                   onClick={handleNext}
-                  className="px-5 py-2 rounded-xl bg-rose-500 text-white font-black text-xs shadow-md"
+                  className="px-5 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-black text-xs shadow-md"
                 >
                   다음 문제로 이동 →
                 </button>

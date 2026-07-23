@@ -46,6 +46,11 @@ export default function AdminDashboardPage() {
         router.push('/login')
         return
       }
+      if (u.role !== 'admin') {
+        alert('🔒 관리자 접근 권한(role === admin)이 필요합니다.')
+        router.push('/parent')
+        return
+      }
       setUser(u)
       await reloadData()
     }
