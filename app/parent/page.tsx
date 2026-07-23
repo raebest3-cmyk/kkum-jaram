@@ -33,7 +33,6 @@ export default function ParentDashboardPage() {
       setUser(u)
 
       if (u) {
-        // Supabase DB 자녀 프로필 실시간 Fetch
         const list = await fetchChildrenProfiles(u.id)
         setChildren(list)
 
@@ -64,7 +63,6 @@ export default function ParentDashboardPage() {
 
     if (children.length > 0) {
       const childId = children[0].id
-      // DB 포인트 차감 및 소원 상태 갱신
       await addPointsLedger(childId, -500, '소원상자 선물 승인 차감')
       if (wishes.length > 0 && wishes[0].id) {
         await updateWishStatus(wishes[0].id, 'achieved')
@@ -77,6 +75,10 @@ export default function ParentDashboardPage() {
 
     alert('🎉 소원이 성공적으로 승인되었습니다! 선물 인증샷이 가족 꿈 앨범에 보관됩니다.')
   }
+
+  const firstChild = children.length > 0 ? children[0] : null
+  const childName = firstChild?.nickname || '수빈이'
+  const dreamJob = firstChild?.dream_job || '꿈나무 🌟'
 
   return (
     <div className="min-h-screen bg-[#FAF8F5] text-slate-800 font-sans flex flex-col">
@@ -149,7 +151,7 @@ export default function ParentDashboardPage() {
             </div>
           </section>
 
-          {/* 2. 등록된 자녀 프로필 세션 */}
+          {/* 2. 등록된 자녀 프로필 세션 (동적 바인딩) */}
           <section className="bg-white rounded-3xl p-6 sm:p-7 border border-amber-200/60 shadow-xl shadow-amber-900/5 space-y-4">
             <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
               <span>👦👧</span>
@@ -171,7 +173,7 @@ export default function ParentDashboardPage() {
                         </span>
                       </div>
                       <p className="text-xs text-slate-500 font-bold mt-1">
-                        장래희망: {ch.dream_job || '요리사 👨‍🍳'} | 보유 포인트: 🪙 {childPoints} P
+                        희망: {ch.dream_job || '꿈나무 🌟'} | 보유 포인트: 🪙 {childPoints} P
                       </p>
                     </div>
 
@@ -240,7 +242,7 @@ export default function ParentDashboardPage() {
               </div>
 
               <div className="bg-rose-50/80 rounded-2xl p-4 border border-rose-200 text-xs text-rose-900 font-bold leading-relaxed">
-                💡 <strong>약점 분석 처방:</strong> 단위분수 크기 비교(1/4 과 1/6)에서 분모가 클수록 작아지는 원리를 더 다질 필요가 있습니다.
+                💡 <strong>약점 분석 처방:</strong> {childName} 어린이는 단위분수 크기 비교(1/4 과 1/6)에서 분모가 클수록 작아지는 원리를 더 다질 필요가 있습니다.
               </div>
             </div>
 
@@ -258,10 +260,10 @@ export default function ParentDashboardPage() {
 
                 <div className="mt-4 bg-[#FFF8E7] rounded-2xl p-5 border border-[#FDE68A] space-y-3 text-xs sm:text-sm text-slate-800 font-bold leading-relaxed">
                   <p className="text-amber-950">
-                    "아이 요리사는 이번 주 <strong>세 자리 수 덧셈·뺄셈</strong> 단원을 높은 정답률로 완벽히 마스터하였습니다!"
+                    "{childName} 어린이는 이번 주 <strong>세 자리 수 덧셈·뺄셈</strong> 단원을 높은 정답률로 완벽히 마스터하였습니다!"
                   </p>
                   <p className="text-slate-700 font-medium">
-                    특히 <strong>AI 말로 설명하기 미션</strong>에서 음성(STT)으로 나눗셈을 '음식을 똑같이 나누어 담는 요리 레시피'에 비유하여 설명하는 메타인지 능력이 매우 뛰어납니다.
+                    특히 <strong>AI 말로 설명하기 미션</strong>에서 {dreamJob}의 꿈에 어울리는 논리적인 언어로 나눗셈 원리를 설명하는 메타인지 능력이 매우 뛰어납니다.
                   </p>
                 </div>
               </div>
@@ -296,7 +298,7 @@ export default function ParentDashboardPage() {
                 <div className="flex justify-between text-slate-700">
                   <span>신청된 소원 선물:</span>
                   <span className="font-black text-amber-700">
-                    {wishes.length > 0 ? wishes[0].title : '어린이 쉐프 요리 도구 세트 👨‍🍳'}
+                    {wishes.length > 0 ? wishes[0].title : '원하는 소원 선물 상자 🎁'}
                   </span>
                 </div>
                 <div className="flex justify-between text-slate-700">
@@ -360,14 +362,16 @@ export default function ParentDashboardPage() {
               </div>
               <h3 className="text-xl font-black text-slate-900">소원상자 선물 승인</h3>
               <p className="text-xs text-slate-500 font-bold mt-1">
-                학습 미션을 완료하여 모은 포인트를 DB 원장에서 정산하고 선물을 승인합니다.
+                {childName} 어린이가 학습 미션을 완료하여 모은 포인트를 DB 원장에서 정산하고 선물을 승인합니다.
               </p>
             </div>
 
             <div className="bg-white p-4 rounded-2xl border border-amber-200 space-y-2 text-xs font-bold">
               <div className="flex justify-between text-slate-700">
                 <span>신청 소원:</span>
-                <span className="font-black text-amber-700">어린이 쉐프 요리 도구 세트 👨‍🍳</span>
+                <span className="font-black text-amber-700">
+                  {wishes.length > 0 ? wishes[0].title : '원하는 소원 선물 🎁'}
+                </span>
               </div>
               <div className="flex justify-between text-slate-700">
                 <span>차감 포인트:</span>

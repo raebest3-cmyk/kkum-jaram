@@ -44,7 +44,6 @@ export default function ChildDashboardPage() {
       setUser(u)
 
       if (u) {
-        // Supabase DB 자녀 프로필 실시간 Fetch
         const list = await fetchChildrenProfiles(u.id)
         if (list.length > 0) {
           setChild(list[0])
@@ -52,21 +51,21 @@ export default function ChildDashboardPage() {
           setPoints(dbPoints)
         } else {
           setChild({
-            id: 'subin-demo',
+            id: 'child-demo',
             account_id: u.id,
             nickname: '수빈이',
             grade: 3,
-            dream_job: '요리사 👨‍🍳',
+            dream_job: '로봇 공학자 🤖',
             theme: 'elementary'
           })
         }
       } else {
         setChild({
-          id: 'subin-demo',
+          id: 'child-demo',
           account_id: 'demo',
           nickname: '수빈이',
           grade: 3,
-          dream_job: '요리사 👨‍🍳',
+          dream_job: '로봇 공학자 🤖',
           theme: 'elementary'
         })
       }
@@ -135,8 +134,10 @@ export default function ChildDashboardPage() {
     }
   }
 
+  // 동적 자녀 프로필 바인딩
   const childName = child?.nickname || '수빈이'
-  const dreamJob = child?.dream_job || '요리사 👨‍🍳'
+  const dreamJob = child?.dream_job || '꿈나무 🌟'
+  const grade = child?.grade || 3
 
   const addMastery = Math.round((masteryMap['MATH-G3-ADD'] ?? 0.85) * 100)
   const mulMastery = Math.round((masteryMap['MATH-G3-MUL'] ?? 0.60) * 100)
@@ -147,7 +148,7 @@ export default function ChildDashboardPage() {
       <Navbar />
 
       <div className="flex-1 p-4 sm:p-8 max-w-6xl mx-auto w-full space-y-8">
-        {/* 상단 프로필 카드 */}
+        {/* 동적 프로필 웰컴 카드 */}
         <section className="relative overflow-hidden bg-white rounded-3xl p-6 sm:p-8 border border-amber-200/60 shadow-xl shadow-amber-900/5">
           <div className="absolute -top-6 -right-6 w-32 h-32 bg-amber-100/60 rounded-full blur-2xl pointer-events-none" />
           <div className="absolute -bottom-6 -left-6 w-32 h-32 bg-emerald-100/60 rounded-full blur-2xl pointer-events-none" />
@@ -158,9 +159,6 @@ export default function ChildDashboardPage() {
                 <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-3xl bg-gradient-to-tr from-amber-300 via-yellow-200 to-emerald-200 flex items-center justify-center text-4xl shadow-md border-2 border-white ring-4 ring-amber-100">
                   👧
                 </div>
-                <div className="absolute -bottom-1 -right-1 bg-white text-xs p-1 rounded-full shadow border border-amber-200">
-                  👨‍🍳
-                </div>
               </div>
 
               <div>
@@ -169,18 +167,18 @@ export default function ChildDashboardPage() {
                     {childName}의 꿈 자람 터
                   </h1>
                   <span className="bg-emerald-100 text-emerald-800 border border-emerald-300/80 px-3 py-1 rounded-full text-xs font-black">
-                    초등학교 {child?.grade || 3}학년 🌱
+                    초등학교 {grade}학년 🌱
                   </span>
                   <span className="bg-amber-100 text-amber-900 border border-amber-300/80 px-3 py-1 rounded-full text-xs font-black flex items-center gap-1">
-                    <span>꿈:</span>
+                    <span>희망:</span>
                     <span>{dreamJob}</span>
                   </span>
                 </div>
 
                 <div className="mt-3 inline-flex items-center gap-2 bg-[#FFF8E7] text-[#B45309] border border-[#FDE68A] px-4 py-2 rounded-2xl text-xs font-bold shadow-sm">
-                  <span className="text-base">🍳</span>
+                  <span className="text-base">🚀</span>
                   <span>
-                    <strong>{childName} 요리사의 오늘 특별 미션 레시피!</strong> 10개 문항을 풀고 실시간 보상을 받아보세요!
+                    <strong>{childName} 어린이의 오늘 특별 학습 미션!</strong> {dreamJob}의 꿈을 위해 10개 문항을 풀고 보상을 받아보세요!
                   </span>
                 </div>
               </div>
@@ -208,7 +206,7 @@ export default function ChildDashboardPage() {
             <div>
               <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
                 <span>🎯</span>
-                <span>오늘의 미션 레시피 (3종)</span>
+                <span>오늘의 미션 (3종)</span>
               </h2>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
                 버튼을 누르면 실시간 문제 풀이가 시작됩니다!
@@ -295,7 +293,7 @@ export default function ChildDashboardPage() {
                   AI와 말로 설명하기
                 </h3>
                 <p className="text-xs text-amber-800/80 leading-relaxed font-bold mb-6">
-                  음성 마이크🎙️로 직접 나눗셈 개념을 AI 선생님에게 요리법처럼 설명해 봐요!
+                  음성 마이크🎙️로 직접 나눗셈 개념을 AI 선생님에게 설명해 봐요!
                 </p>
               </div>
 
@@ -391,17 +389,17 @@ export default function ChildDashboardPage() {
                   <div>
                     <span className="text-xs font-extrabold text-amber-700">도전 소원 선물</span>
                     <p className="text-xl font-black text-slate-900 mt-0.5">
-                      어린이 쉐프 요리 도구 세트 👨‍🍳
+                      원하는 소원 선물 상자 🎁
                     </p>
                   </div>
                   <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center text-2xl shadow-sm border border-amber-200">
-                    🍳
+                    🎁
                   </div>
                 </div>
 
                 <div className="space-y-1.5 pt-2">
                   <div className="flex justify-between text-xs font-black">
-                    <span className="text-slate-600">포인트 모으기 (DB 실시간 연동)</span>
+                    <span className="text-slate-600">포인트 모으기 (DB 연동)</span>
                     <span className="text-amber-600">
                       {points} P / 500 P ({Math.min(100, Math.round((points / 500) * 100))}%)
                     </span>
