@@ -6,8 +6,8 @@ import { loginWithEmail } from '@/lib/auth'
 
 export default function AdminLoginPage() {
   const router = useRouter()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [email, setEmail] = useState('admin@kkumjaram.kr')
+  const [password, setPassword] = useState('admin1234!')
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
 
