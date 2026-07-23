@@ -3,7 +3,18 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Navbar from '@/components/Navbar'
-import { getChildrenProfiles, ChildProfile, getCurrentUser, UserAccount, getUserApiKey } from '@/lib/auth'
+import {
+  getCurrentUser,
+  fetchChildrenProfiles,
+  fetchChildPoints,
+  addPointsLedger,
+  fetchWishes,
+  updateWishStatus,
+  ChildProfile,
+  UserAccount,
+  WishItem,
+  getUserApiKey
+} from '@/lib/auth'
 
 export default function ParentDashboardPage() {
   const [user, setUser] = useState<UserAccount | null>(null)
@@ -12,6 +23,7 @@ export default function ParentDashboardPage() {
 
   // 소원 승인 팝업 모달 상태
   const [showApprovalModal, setShowApprovalModal] = useState<boolean>(false)
+  const [wishes, setWishes] = useState<WishItem[]>([])
   const [wishStatus, setWishStatus] = useState<'active' | 'achieved'>('active')
   const [childPoints, setChildPoints] = useState<number>(520)
 
@@ -19,25 +31,51 @@ export default function ParentDashboardPage() {
     async function loadData() {
       const u = await getCurrentUser()
       setUser(u)
-      const list = getChildrenProfiles()
-      setChildren(list)
+
+      if (u) {
+        // Supabase DB 자녀 프로필 실시간 Fetch
+        const list = await fetchChildrenProfiles(u.id)
+        setChildren(list)
+
+        if (list.length > 0) {
+          const childId = list[0].id
+          const pts = await fetchChildPoints(childId)
+          setChildPoints(pts)
+
+          const wishList = await fetchWishes(childId)
+          setWishes(wishList)
+          if (wishList.length > 0 && wishList[0].status) {
+            setWishStatus(wishList[0].status as 'active' | 'achieved')
+          }
+        }
+      }
+
       const key = getUserApiKey()
       setHasApiKey(!!key)
     }
     loadData()
   }, [])
 
-  const handleApproveWish = () => {
+  const handleApproveWish = async () => {
     if (childPoints < 500) {
       alert('아이의 보유 포인트가 목표 포인트(500P)보다 부족합니다.')
       return
     }
 
-    setChildPoints((prev) => prev - 500)
+    if (children.length > 0) {
+      const childId = children[0].id
+      // DB 포인트 차감 및 소원 상태 갱신
+      await addPointsLedger(childId, -500, '소원상자 선물 승인 차감')
+      if (wishes.length > 0 && wishes[0].id) {
+        await updateWishStatus(wishes[0].id, 'achieved')
+      }
+      setChildPoints((prev) => prev - 500)
+    }
+
     setWishStatus('achieved')
     setShowApprovalModal(false)
 
-    alert('🎉 소원이 승인되었습니다! 선물 인증샷이 가족 꿈 앨범에 추가됩니다.')
+    alert('🎉 소원이 성공적으로 승인되었습니다! 선물 인증샷이 가족 꿈 앨범에 보관됩니다.')
   }
 
   return (
@@ -54,11 +92,11 @@ export default function ParentDashboardPage() {
                 부모 학습 성장 리포트
               </h1>
               <span className="text-xs font-black px-3 py-1 rounded-full bg-[#003087] text-[#C8A951]">
-                부모 모드
+                Supabase DB 연동 세션
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-              수빈이의 주간 학습 성취도, 약점 분석 및 AI 성장 총평을 모니터링합니다.
+              로그인한 사용자 계정(`account_id`) 기준의 실시간 자녀 데이터 리포트입니다.
             </p>
           </div>
 
@@ -73,7 +111,7 @@ export default function ParentDashboardPage() {
         </header>
 
         <main className="space-y-8">
-          {/* 1. 주간 학습 성취도 요약 (4개 지표 카드) */}
+          {/* 1. 주간 학습 성취도 요약 */}
           <section className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
             <div className="bg-white rounded-3xl p-5 border border-amber-200/60 shadow-md flex flex-col justify-between">
               <span className="text-xs font-extrabold text-slate-500">주간 풀이 문항 수</span>
@@ -93,7 +131,7 @@ export default function ParentDashboardPage() {
             </div>
 
             <div className="bg-white rounded-3xl p-5 border border-amber-200/60 shadow-md flex flex-col justify-between">
-              <span className="text-xs font-extrabold text-slate-500">누적 보유 포인트</span>
+              <span className="text-xs font-extrabold text-slate-500">DB 실시간 보유 포인트</span>
               <div className="mt-2 flex items-baseline gap-1">
                 <span className="text-3xl font-black text-amber-600">🪙 {childPoints}</span>
                 <span className="text-xs font-bold text-slate-500">P</span>
@@ -111,9 +149,53 @@ export default function ParentDashboardPage() {
             </div>
           </section>
 
-          {/* 2. 단원별 약점 개념 분석 & AI 성장 총평 (2 컬럼) */}
+          {/* 2. 등록된 자녀 프로필 세션 */}
+          <section className="bg-white rounded-3xl p-6 sm:p-7 border border-amber-200/60 shadow-xl shadow-amber-900/5 space-y-4">
+            <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
+              <span>👦👧</span>
+              <span>DB 연동된 자녀 프로필 ({children.length}명)</span>
+            </h2>
+
+            {children.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {children.map((ch) => (
+                  <div
+                    key={ch.id}
+                    className="bg-[#FAF8F5] rounded-2xl p-5 border border-amber-200/80 flex justify-between items-center"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg font-black text-slate-900">{ch.nickname}</span>
+                        <span className="text-xs bg-[#003087] text-[#C8A951] px-2.5 py-0.5 rounded-full font-black">
+                          초등 {ch.grade}학년
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 font-bold mt-1">
+                        장래희망: {ch.dream_job || '요리사 👨‍🍳'} | 보유 포인트: 🪙 {childPoints} P
+                      </p>
+                    </div>
+
+                    <Link
+                      href="/child"
+                      className="px-3.5 py-2 rounded-xl bg-white hover:bg-amber-100 text-xs font-black text-amber-900 border border-amber-300 transition-colors shadow-sm"
+                    >
+                      학습 대시보드 뷰 →
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-slate-500 text-sm font-bold">
+                등록된 자녀 프로필이 없습니다.{' '}
+                <Link href="/onboarding" className="text-amber-700 underline font-black">
+                  온보딩에서 추가하기
+                </Link>
+              </div>
+            )}
+          </section>
+
+          {/* 3. 단원별 약점 분석 & AI 성장 총평 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* 단원별 약점 개념 시각화 분석 */}
             <div className="bg-white rounded-3xl p-6 sm:p-7 border border-amber-200/60 shadow-xl shadow-amber-900/5 space-y-5">
               <div className="flex justify-between items-center border-b border-slate-100 pb-4">
                 <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
@@ -158,11 +240,10 @@ export default function ParentDashboardPage() {
               </div>
 
               <div className="bg-rose-50/80 rounded-2xl p-4 border border-rose-200 text-xs text-rose-900 font-bold leading-relaxed">
-                💡 <strong>약점 분석 처방:</strong> 수빈이는 단위분수 크기 비교(1/4 과 1/6)에서 분모가 클수록 작아지는 원리를 더 다질 필요가 있습니다.
+                💡 <strong>약점 분석 처방:</strong> 단위분수 크기 비교(1/4 과 1/6)에서 분모가 클수록 작아지는 원리를 더 다질 필요가 있습니다.
               </div>
             </div>
 
-            {/* AI 성장 총평 리포트 카드 */}
             <div className="bg-white rounded-3xl p-6 sm:p-7 border border-amber-200/60 shadow-xl shadow-amber-900/5 space-y-5 flex flex-col justify-between">
               <div>
                 <div className="flex justify-between items-center border-b border-slate-100 pb-4">
@@ -177,10 +258,10 @@ export default function ParentDashboardPage() {
 
                 <div className="mt-4 bg-[#FFF8E7] rounded-2xl p-5 border border-[#FDE68A] space-y-3 text-xs sm:text-sm text-slate-800 font-bold leading-relaxed">
                   <p className="text-amber-950">
-                    "수빈 요리사는 이번 주 <strong>세 자리 수 덧셈·뺄셈</strong> 단원을 높은 정답률로 완벽히 마스터하였습니다!"
+                    "아이 요리사는 이번 주 <strong>세 자리 수 덧셈·뺄셈</strong> 단원을 높은 정답률로 완벽히 마스터하였습니다!"
                   </p>
                   <p className="text-slate-700 font-medium">
-                    특히 <strong>AI 말로 설명하기 미션</strong>에서 나눗셈을 '음식을 똑같이 나누어 담는 요리 레시피'에 비유하여 설명하는 메타인지 능력이 매우 뛰어납니다. 다음 주에는 분수의 크기 비교 단원을 맞춤 복습하도록 권장합니다.
+                    특히 <strong>AI 말로 설명하기 미션</strong>에서 음성(STT)으로 나눗셈을 '음식을 똑같이 나누어 담는 요리 레시피'에 비유하여 설명하는 메타인지 능력이 매우 뛰어납니다.
                   </p>
                 </div>
               </div>
@@ -192,13 +273,13 @@ export default function ParentDashboardPage() {
             </div>
           </div>
 
-          {/* 3. 소원상자 승인 & BYOK 관리 (2 컬럼) */}
+          {/* 4. 소원상자 승인 & BYOK 관리 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-white rounded-3xl p-6 border border-amber-200/60 shadow-lg shadow-amber-900/5 space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
                   <span>🎁</span>
-                  <span>소원상자 승인 & 포인트 정산</span>
+                  <span>소원상자 승인 & 포인트 정산 (DB)</span>
                 </h3>
                 <span
                   className={`text-xs px-3 py-1 rounded-full font-black ${
@@ -214,7 +295,9 @@ export default function ParentDashboardPage() {
               <div className="bg-[#FAF8F5] p-4 rounded-2xl border border-amber-200/80 space-y-2 text-xs font-bold">
                 <div className="flex justify-between text-slate-700">
                   <span>신청된 소원 선물:</span>
-                  <span className="font-black text-amber-700">어린이 쉐프 요리 도구 세트 👨‍🍳</span>
+                  <span className="font-black text-amber-700">
+                    {wishes.length > 0 ? wishes[0].title : '어린이 쉐프 요리 도구 세트 👨‍🍳'}
+                  </span>
                 </div>
                 <div className="flex justify-between text-slate-700">
                   <span>목표 / 보유 포인트:</span>
@@ -267,7 +350,7 @@ export default function ParentDashboardPage() {
         </main>
       </div>
 
-      {/* 부모 소원 승인 팝업 모달 */}
+      {/* 소원 승인 팝업 모달 */}
       {showApprovalModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-md animate-fade-in">
           <div className="w-full max-w-md bg-[#FDFBF7] rounded-3xl border-2 border-amber-300 p-6 shadow-2xl space-y-5">
@@ -277,7 +360,7 @@ export default function ParentDashboardPage() {
               </div>
               <h3 className="text-xl font-black text-slate-900">소원상자 선물 승인</h3>
               <p className="text-xs text-slate-500 font-bold mt-1">
-                수빈이가 학습 미션을 완료하여 모은 포인트를 정산하고 선물을 승인합니다.
+                학습 미션을 완료하여 모은 포인트를 DB 원장에서 정산하고 선물을 승인합니다.
               </p>
             </div>
 

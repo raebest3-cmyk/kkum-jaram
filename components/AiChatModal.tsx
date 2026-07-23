@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { getUserApiKey } from '@/lib/auth'
 
 interface AiChatModalProps {
@@ -21,7 +21,7 @@ export default function AiChatModal({ childName, dreamJob, onClose }: AiChatModa
     {
       id: 'msg-1',
       sender: 'ai',
-      text: `안녕 ${childName} 요리사님! 👨‍🍳 오늘 탐구할 나눗셈 개념을 나만의 레시피처럼 설명해 볼까요? 어떤 생각을 했는지 편하게 말해줘요!`,
+      text: `안녕 ${childName} 요리사님! 👨‍🍳 마이크 버튼 🎙️을 누르고 말하거나 텍스트로 나눗셈 개념을 설명해 볼까요?`,
       timestamp: '방금 전'
     }
   ])
@@ -29,6 +29,73 @@ export default function AiChatModal({ childName, dreamJob, onClose }: AiChatModa
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [isCompleted, setIsCompleted] = useState(false)
+
+  // STT (Web Speech API) 상태
+  const [isListening, setIsListening] = useState(false)
+  const [speechSupported, setSpeechSupported] = useState(true)
+
+  useEffect(() => {
+    // Web Speech API 지원 확인
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition =
+        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+      if (!SpeechRecognition) {
+        setSpeechSupported(false)
+      }
+    }
+  }, [])
+
+  // STT 음성 인식 시작/중지
+  const toggleSpeechRecognition = () => {
+    if (typeof window === 'undefined') return
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+
+    if (!SpeechRecognition) {
+      alert('사용 중이신 브라우저에서는 음성 인식(STT)을 지원하지 않습니다. 텍스트 입력창을 이용해 주세요!')
+      return
+    }
+
+    if (isListening) {
+      setIsListening(false)
+      return
+    }
+
+    try {
+      const recognition = new SpeechRecognition()
+      recognition.lang = 'ko-KR'
+      recognition.interimResults = true
+      recognition.continuous = false
+
+      recognition.onstart = () => {
+        setIsListening(true)
+      }
+
+      recognition.onresult = (event: any) => {
+        const transcript = Array.from(event.results)
+          .map((result: any) => result[0])
+          .map((result: any) => result.transcript)
+          .join('')
+
+        setInput(transcript)
+      }
+
+      recognition.onerror = (event: any) => {
+        console.warn('Speech recognition error:', event.error)
+        setIsListening(false)
+      }
+
+      recognition.onend = () => {
+        setIsListening(false)
+      }
+
+      recognition.start()
+    } catch (e) {
+      console.error(e)
+      setIsListening(false)
+    }
+  }
 
   // 메시지 전송 및 AI 응답 처리
   const handleSendMessage = async () => {
@@ -44,7 +111,8 @@ export default function AiChatModal({ childName, dreamJob, onClose }: AiChatModa
 
     setMessages((prev) => [...prev, newMsg])
     setInput('')
-    setLoading(true)
+    setLoading(false)
+    setIsListening(false)
 
     // AI 응답 시뮬레이션 / BYOK 호출
     setTimeout(() => {
@@ -52,7 +120,7 @@ export default function AiChatModal({ childName, dreamJob, onClose }: AiChatModa
       const key = getUserApiKey()
 
       if (userText.includes('나누기') || userText.includes('조각') || userText.includes('나눗셈')) {
-        aiText = `와! ${childName} 요리사님이 똑같이 나누어 담는 원리를 정말 근사하게 설명했네요! 🍕 피자 한 판을 친구들과 나눌 때 나눗셈을 쓰는 이유를 잘 파악했어요! 칭찬해요 ⭐`
+        aiText = `와! ${childName} 요리사님이 똑같이 나누어 담는 원리를 정말 근사하게 음성으로 설명했네요! 🍕 피자 한 판을 친구들과 나눌 때 나눗셈을 쓰는 이유를 잘 파악했어요! 칭찬해요 ⭐`
       } else if (userText.includes('분수') || userText.includes('조각')) {
         aiText = `맞아요! 전체를 똑같이 나눈 것 중 몇 조각인지 생각하는 분수의 개념을 훌륭하게 말해줬어요! 👏`
       } else {
@@ -75,7 +143,7 @@ export default function AiChatModal({ childName, dreamJob, onClose }: AiChatModa
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-md animate-fade-in">
-      <div className="w-full max-w-xl bg-[#FDFBF7] rounded-3xl border-2 border-amber-300 shadow-2xl overflow-hidden flex flex-col h-[600px] max-h-[90vh]">
+      <div className="w-full max-w-xl bg-[#FDFBF7] rounded-3xl border-2 border-amber-300 shadow-2xl overflow-hidden flex flex-col h-[620px] max-h-[90vh]">
         {/* 파스텔 옐로우/오렌지 모달 헤더 */}
         <div className="bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-200 text-amber-950 px-6 py-4 flex justify-between items-center border-b border-amber-300 shadow-sm">
           <div className="flex items-center gap-3">
@@ -83,11 +151,14 @@ export default function AiChatModal({ childName, dreamJob, onClose }: AiChatModa
               🤖
             </div>
             <div>
-              <h2 className="text-lg font-black tracking-tight text-amber-950">
-                AI 선생님과 말로 설명하기
+              <h2 className="text-lg font-black tracking-tight text-amber-950 flex items-center gap-2">
+                <span>AI 선생님과 말로 설명하기</span>
+                <span className="text-xs font-bold bg-amber-300/80 text-amber-950 px-2 py-0.5 rounded-full">
+                  STT 지원 🎙️
+                </span>
               </h2>
               <p className="text-xs text-amber-800 font-extrabold">
-                {childName} 요리사의 탐구 토론 세션 ✦
+                {childName} 요리사의 음성 탐구 세션 ✦
               </p>
             </div>
           </div>
@@ -133,14 +204,21 @@ export default function AiChatModal({ childName, dreamJob, onClose }: AiChatModa
 
           {loading && (
             <div className="flex items-center gap-2 text-xs font-bold text-amber-700 bg-amber-50 px-4 py-2 rounded-full w-fit border border-amber-200 animate-pulse">
-              <span>🤖 AI 선생님이 수빈이의 설명을 읽는 중...</span>
+              <span>🤖 AI 선생님이 수빈이의 음성 설명을 듣는 중...</span>
+            </div>
+          )}
+
+          {isListening && (
+            <div className="flex items-center gap-2 text-xs font-black text-rose-700 bg-rose-50 px-4 py-2.5 rounded-2xl border-2 border-rose-300 animate-bounce">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+              <span>🎙️ 수빈이의 목소리를 실시간 듣고 있어요! 말해 주세요...</span>
             </div>
           )}
         </div>
 
         {/* 예시 문장 프리셋 칩 */}
         <div className="px-5 py-2 bg-amber-50/60 border-t border-amber-200 flex gap-2 overflow-x-auto text-xs font-bold">
-          <span className="text-amber-800 shrink-0 py-1">💡 추천 설명:</span>
+          <span className="text-amber-800 shrink-0 py-1">💡 추천 문장:</span>
           <button
             onClick={() => setInput('12개 사과를 4명에게 3개씩 똑같이 나누는 게 나눗셈이에요!')}
             className="bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 px-3 py-1 rounded-full shrink-0 transition-colors"
@@ -155,12 +233,26 @@ export default function AiChatModal({ childName, dreamJob, onClose }: AiChatModa
           </button>
         </div>
 
-        {/* 하단 입력 & 보상 수령 */}
+        {/* 하단 STT 음성 마이크 버튼 & 텍스트 입력창 */}
         <div className="p-4 bg-white border-t border-amber-200 space-y-3">
           <div className="flex items-center gap-2">
+            {/* STT 음성 인식 마이크 버튼 */}
+            <button
+              type="button"
+              onClick={toggleSpeechRecognition}
+              title="음성으로 말하기 (STT)"
+              className={`p-3.5 rounded-2xl border-2 font-black text-base shadow-sm transition-all flex items-center justify-center shrink-0 ${
+                isListening
+                  ? 'bg-rose-500 text-white border-rose-600 ring-4 ring-rose-200 scale-105 animate-pulse'
+                  : 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200'
+              }`}
+            >
+              <span>🎙️</span>
+            </button>
+
             <input
               type="text"
-              placeholder="AI 선생님에게 나눗셈 원리를 설명해 보세요..."
+              placeholder={isListening ? '듣고 있는 중입니다...' : '음성으로 말하거나 텍스트로 입력하세요...'}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
