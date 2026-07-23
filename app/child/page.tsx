@@ -27,7 +27,7 @@ export default function ChildDashboardPage() {
   // 프로필 스위처 모달 상태
   const [showProfileSwitcher, setShowProfileSwitcher] = useState<boolean>(false)
 
-  // 포인트 상태 (DB 연동)
+  // 포인트 (선물 조각) 상태 (DB 연동)
   const [points, setPoints] = useState<number>(120)
 
   // 추억 앨범 갤러리 모달 상태
@@ -170,7 +170,6 @@ export default function ChildDashboardPage() {
     }
   }
 
-  // 동적 자녀 프로필 바인딩
   const childName = child?.nickname || '수빈이'
   const dreamJob = child?.dream_job || '꿈나무 🌟'
   const grade = child?.grade || 3
@@ -184,7 +183,7 @@ export default function ChildDashboardPage() {
       <Navbar />
 
       <div className="flex-1 p-4 sm:p-8 max-w-6xl mx-auto w-full space-y-8">
-        {/* 동적 프로필 웰컴 카드 (프로필 스위처 모달 연동) */}
+        {/* 동적 프로필 웰컴 카드 */}
         <section className="relative overflow-hidden bg-white rounded-3xl p-6 sm:p-8 border border-amber-200/60 shadow-xl shadow-amber-900/5">
           <div className="absolute -top-6 -right-6 w-32 h-32 bg-amber-100/60 rounded-full blur-2xl pointer-events-none" />
           <div className="absolute -bottom-6 -left-6 w-32 h-32 bg-emerald-100/60 rounded-full blur-2xl pointer-events-none" />
@@ -231,13 +230,13 @@ export default function ChildDashboardPage() {
               </div>
             </div>
 
-            {/* 보유 포인트 파스텔 젤리 뱃지 */}
+            {/* 보유 선물 조각 파스텔 젤리 뱃지 */}
             <div className="w-full md:w-auto bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200/80 px-6 py-4 rounded-3xl shadow-sm flex items-center justify-between md:justify-end gap-4">
               <div className="text-left md:text-right">
-                <p className="text-xs font-extrabold text-amber-700/80">{childName}의 보물 포인트</p>
+                <p className="text-xs font-extrabold text-amber-700/80">{childName}의 보유 선물 조각</p>
                 <p className="text-2xl font-black text-amber-600 flex items-center gap-1.5 mt-0.5">
-                  <span>🪙</span>
-                  <span>{points} P</span>
+                  <span>🧩</span>
+                  <span>{points}개 모음</span>
                 </p>
               </div>
               <div className="w-10 h-10 rounded-2xl bg-amber-200/60 flex items-center justify-center text-xl text-amber-700">
@@ -282,7 +281,7 @@ export default function ChildDashboardPage() {
               </div>
 
               <div className="pt-4 border-t border-[#BEEBDD]/60 flex items-center justify-between">
-                <span className="text-xs font-bold text-[#065F46]">보상 +50 P</span>
+                <span className="text-xs font-bold text-[#065F46]">보상 +50 조각</span>
                 <button
                   disabled={loadingMission}
                   onClick={handleStartMission}
@@ -345,7 +344,7 @@ export default function ChildDashboardPage() {
               </div>
 
               <div className="pt-4 border-t border-[#FFE8B3]/60 flex items-center justify-between">
-                <span className="text-xs font-bold text-amber-900">보상 +30 P</span>
+                <span className="text-xs font-bold text-amber-900">보상 +30 조각</span>
                 <button
                   onClick={() => setShowAiModal(true)}
                   className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-amber-950 font-black text-xs shadow-md hover:scale-105 transition-all flex items-center gap-1"
@@ -449,9 +448,9 @@ export default function ChildDashboardPage() {
 
                 <div className="space-y-1.5 pt-2">
                   <div className="flex justify-between text-xs font-black">
-                    <span className="text-slate-600">포인트 모으기 (DB 연동)</span>
+                    <span className="text-slate-600">선물 조각 모으기 (DB 연동)</span>
                     <span className="text-amber-600">
-                      {points} P / 500 P ({Math.min(100, Math.round((points / 500) * 100))}%)
+                      🧩 {points} / 500개 ({Math.min(100, Math.round((points / 500) * 100))}%)
                     </span>
                   </div>
                   <div className="w-full bg-white h-4 rounded-full overflow-hidden p-0.5 border border-amber-200">
@@ -465,8 +464,8 @@ export default function ChildDashboardPage() {
             </div>
 
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-slate-500">
-              <span>남은 포인트: {Math.max(0, 500 - points)} P</span>
-              <span className="text-amber-600 font-extrabold">미션 완주 시 +50 P 지급!</span>
+              <span>남은 선물 조각: {Math.max(0, 500 - points)}개</span>
+              <span className="text-amber-600 font-extrabold">미션 완주 시 +50 조각 지급!</span>
             </div>
           </div>
         </div>
@@ -586,7 +585,7 @@ export default function ChildDashboardPage() {
                     <div className="space-y-1">
                       <div className="flex justify-between items-center">
                         <span className="text-xs font-black text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                          {item.redemption_type || '포인트 교환'}
+                          {item.redemption_type || '선물 조각 교환'}
                         </span>
                         <span className="text-[11px] font-bold text-slate-400">
                           {item.achieved_at ? new Date(item.achieved_at).toLocaleDateString() : '달성 완료'}
@@ -611,7 +610,7 @@ export default function ChildDashboardPage() {
                 </div>
                 <p className="text-sm font-bold">아직 보관된 소원 달성 추억 앨범이 없습니다.</p>
                 <p className="text-xs text-slate-400">
-                  매일 문제를 풀어 500포인트를 모으면 부모님께서 예쁜 선물과 축하 메시지를 앨범에 보관해 주실 거예요!
+                  매일 문제를 풀어 500개의 선물 조각을 모으면 부모님께서 예쁜 선물과 축하 메시지를 앨범에 보관해 주실 거예요!
                 </p>
               </div>
             )}

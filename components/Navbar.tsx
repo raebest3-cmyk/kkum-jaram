@@ -3,7 +3,14 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
-import { getCurrentUser, getChildrenProfiles, logoutUser, UserAccount, ChildProfile } from '@/lib/auth'
+import {
+  getCurrentUser,
+  getChildrenProfiles,
+  getSelectedChildId,
+  logoutUser,
+  UserAccount,
+  ChildProfile
+} from '@/lib/auth'
 
 export default function Navbar() {
   const router = useRouter()
@@ -13,15 +20,23 @@ export default function Navbar() {
   const [selectedChild, setSelectedChild] = useState<ChildProfile | null>(null)
   const [mode, setMode] = useState<'parent' | 'child'>('child')
 
+  const refreshChildProfile = (childList: ChildProfile[]) => {
+    if (childList.length > 0) {
+      const savedId = getSelectedChildId()
+      const found = childList.find((c) => c.id === savedId)
+      setSelectedChild(found || childList[0])
+    } else {
+      setSelectedChild(null)
+    }
+  }
+
   useEffect(() => {
     async function loadSession() {
       const u = await getCurrentUser()
       setUser(u)
       const childList = getChildrenProfiles()
       setChildren(childList)
-      if (childList.length > 0) {
-        setSelectedChild(childList[0])
-      }
+      refreshChildProfile(childList)
     }
     loadSession()
 
@@ -29,6 +44,23 @@ export default function Navbar() {
       setMode('parent')
     } else {
       setMode('child')
+    }
+
+    // 전역 자녀 변경 이벤트 핸들러
+    const handleChildChange = (e: any) => {
+      const childList = getChildrenProfiles()
+      setChildren(childList)
+
+      const targetId = e?.detail?.childId || getSelectedChildId()
+      if (childList.length > 0) {
+        const found = childList.find((c) => c.id === targetId)
+        setSelectedChild(found || childList[0])
+      }
+    }
+
+    window.addEventListener('kkum_jaram_child_changed', handleChildChange)
+    return () => {
+      window.removeEventListener('kkum_jaram_child_changed', handleChildChange)
     }
   }, [pathname])
 
@@ -75,7 +107,7 @@ export default function Navbar() {
                   : 'bg-[#C8A951]/20 text-[#C8A951]'
               }`}
             >
-              초등 3학년 수학 ✦
+              {selectedChild ? `초등 ${selectedChild.grade}학년 수학 ✦` : '초등 수학 ✦'}
             </span>
           </div>
         </Link>
@@ -128,10 +160,18 @@ export default function Navbar() {
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {user ? (
             <div className="flex items-center gap-2 sm:gap-3">
-              {selectedChild && isChildMode && (
-                <div className="hidden lg:flex items-center gap-2 rounded-2xl bg-white px-3 py-1 text-xs border border-amber-200/80 shadow-sm">
-                  <span className="font-bold text-emerald-700">{selectedChild.nickname}</span>
-                  <span className="text-slate-500">({selectedChild.grade}학년)</span>
+              {/* 전역 실시간 동기화되는 Header 프로필 뱃지 */}
+              {selectedChild && (
+                <div
+                  className={`flex items-center gap-1.5 rounded-2xl px-3 py-1 text-xs border shadow-sm transition-all ${
+                    isChildMode
+                      ? 'bg-white border-amber-200 text-slate-800'
+                      : 'bg-[#00205b] border-[#C8A951]/40 text-[#C8A951]'
+                  }`}
+                >
+                  <span className="text-sm">{selectedChild.grade <= 3 ? '👧' : '👦'}</span>
+                  <span className="font-black">{selectedChild.nickname}</span>
+                  <span className="text-[11px] opacity-80">(초{selectedChild.grade})</span>
                 </div>
               )}
 
