@@ -146,199 +146,111 @@ export async function fetchAdminStats(): Promise<AdminStats> {
   }
 }
 
-export function isSupabaseConfigured(): boolean {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  return !!(url && key && !key.includes('placeholder') && !key.includes('your-anon-key'))
-}
-
-// 현재 로그인 사용자 세션 조회
+// 현재 로그인 사용자 세션 조회 (Strict Supabase Auth & DB)
 export async function getCurrentUser(): Promise<UserAccount | null> {
-  if (isSupabaseConfigured()) {
-    try {
-      const supabase = createClient()
-      const { data: { user }, error } = await supabase.auth.getUser()
-      if (user && !error) {
-        const { data: account } = await supabase
-          .from('accounts')
-          .select('*')
-          .eq('id', user.id)
-          .single()
-
-        const userRole = (account?.role as any) || (user.email?.includes('admin') ? 'admin' : 'parent')
-        return {
-          id: user.id,
-          email: user.email || '',
-          display_name: account?.display_name || user.email?.split('@')[0],
-          role: userRole
-        }
-      }
-    } catch (e) {
-      console.warn('Supabase auth check error:', e)
-    }
+  const supabase = createClient()
+  const { data: { user }, error } = await supabase.auth.getUser()
+  if (error || !user) {
+    return null
   }
 
-  if (typeof window !== 'undefined') {
-    const stored = localStorage.getItem(LOCAL_STORAGE_KEY_SESSION)
-    if (stored) {
-      try {
-        return JSON.parse(stored)
-      } catch {
-        return null
-      }
-    }
+  const { data: account } = await supabase
+    .from('accounts')
+    .select('*')
+    .eq('id', user.id)
+    .single()
+
+  return {
+    id: user.id,
+    email: user.email || '',
+    display_name: account?.display_name || user.email?.split('@')[0],
+    role: (account?.role as any) || 'parent'
   }
-  return null
 }
 
 export async function loginWithEmail(email: string, password?: string): Promise<UserAccount> {
-  const isMasterAdmin = email === 'admin@kkumjaram.kr' || email.startsWith('admin@')
-
-  if (isSupabaseConfigured()) {
-    try {
-      const supabase = createClient()
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password: password || ''
-      })
-
-      if (!error && data?.user) {
-        const { data: account } = await supabase
-          .from('accounts')
-          .select('*')
-          .eq('id', data.user.id)
-          .single()
-
-        const userRole = (account?.role as any) || (isMasterAdmin ? 'admin' : 'parent')
-        const userAcc: UserAccount = {
-          id: data.user.id,
-          email: data.user.email || email,
-          display_name: account?.display_name || email.split('@')[0],
-          role: userRole
-        }
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(LOCAL_STORAGE_KEY_SESSION, JSON.stringify(userAcc))
-        }
-        return userAcc
-      }
-    } catch (e) {
-      console.warn('Supabase signin error:', e)
-    }
-  }
-
-  const fallbackUser: UserAccount = {
-    id: isMasterAdmin ? 'admin-dev-uuid-001' : `user-${Date.now()}`,
+  const supabase = createClient()
+  const { data, error } = await supabase.auth.signInWithPassword({
     email,
-    display_name: email.split('@')[0] || '관리자',
-    role: isMasterAdmin ? 'admin' : 'parent'
+    password: password || ''
+  })
+
+  if (error || !data?.user) {
+    throw new Error(error?.message || '이메일 또는 비밀번호가 올바르지 않습니다.')
   }
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(LOCAL_STORAGE_KEY_SESSION, JSON.stringify(fallbackUser))
+
+  const { data: account } = await supabase
+    .from('accounts')
+    .select('*')
+    .eq('id', data.user.id)
+    .single()
+
+  return {
+    id: data.user.id,
+    email: data.user.email || email,
+    display_name: account?.display_name || email.split('@')[0],
+    role: (account?.role as any) || 'parent'
   }
-  return fallbackUser
 }
 
 export async function registerParentAccount(email: string, displayName: string, password?: string): Promise<UserAccount> {
-  if (isSupabaseConfigured()) {
-    try {
-      const supabase = createClient()
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password: password || '',
-        options: {
-          data: { display_name: displayName }
-        }
-      })
-
-      if (!error && data?.user) {
-        // 신규 계정 가입 시 무조건 기본 role='parent' 고정
-        const roleVal: 'parent' = 'parent'
-        await supabase.from('accounts').upsert({
-          id: data.user.id,
-          display_name: displayName,
-          role: roleVal
-        }, { onConflict: 'id' })
-
-        const userAcc: UserAccount = {
-          id: data.user.id,
-          email: data.user.email || email,
-          display_name: displayName,
-          role: roleVal
-        }
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(LOCAL_STORAGE_KEY_SESSION, JSON.stringify(userAcc))
-        }
-        return userAcc
-      }
-    } catch (e) {
-      console.warn('Supabase signup error:', e)
+  const supabase = createClient()
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password: password || '',
+    options: {
+      data: { display_name: displayName }
     }
+  })
+
+  if (error || !data?.user) {
+    throw new Error(error?.message || '회원가입 처리 중 오류가 발생했습니다.')
   }
 
-  // 신규 가입 시 기본 role='parent' 엄격 적용
-  const fallbackUser: UserAccount = {
-    id: `user-${Date.now()}`,
-    email,
+  // 신규 가입 시 기본 role은 무조건 'parent'로 엄격 고정
+  await supabase.from('accounts').upsert({
+    id: data.user.id,
+    display_name: displayName,
+    role: 'parent'
+  }, { onConflict: 'id' })
+
+  return {
+    id: data.user.id,
+    email: data.user.email || email,
     display_name: displayName,
     role: 'parent'
   }
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(LOCAL_STORAGE_KEY_SESSION, JSON.stringify(fallbackUser))
-  }
-  return fallbackUser
 }
 
-// 전체 가입자 계정 목록 조회 (관리자 전용)
+// 전체 가입자 계정 목록 조회 (관리자 전용 Strict DB 조회)
 export async function fetchAllUserAccounts(): Promise<UserAccount[]> {
-  try {
-    const supabase = createClient()
-    const { data, error } = await supabase
-      .from('accounts')
-      .select('*')
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('accounts')
+    .select('*')
 
-    if (!error && data && data.length > 0) {
-      return data.map((item: any) => ({
-        id: item.id,
-        email: item.email || `${item.display_name || 'user'}@kkumjaram.kr`,
-        display_name: item.display_name || '사용자',
-        role: (item.role as any) || 'parent'
-      }))
-    }
-  } catch (e) {
-    console.warn('Fetch all user accounts fallback:', e)
+  if (error || !data) {
+    throw new Error(error?.message || '가입자 목록을 불러오지 못했습니다.')
   }
 
-  return [
-    { id: 'admin-dev-uuid-001', email: 'admin@kkumjaram.kr', display_name: '시스템 관리자', role: 'admin' },
-    { id: 'parent-demo-001', email: 'parent@kkumjaram.kr', display_name: '민우 엄마', role: 'parent' }
-  ]
+  return data.map((item: any) => ({
+    id: item.id,
+    email: item.email || `${item.display_name || 'user'}@kkumjaram.kr`,
+    display_name: item.display_name || '사용자',
+    role: (item.role as any) || 'parent'
+  }))
 }
 
-// 회원 계정 권한(role: 'admin' | 'parent') 변경/승인 (관리자 전용)
+// 회원 계정 권한(role: 'admin' | 'parent') 변경/승인 (Strict DB Update)
 export async function updateUserAccountRole(userId: string, newRole: 'admin' | 'parent'): Promise<void> {
-  try {
-    const supabase = createClient()
-    await supabase
-      .from('accounts')
-      .update({ role: newRole })
-      .eq('id', userId)
-  } catch (e) {
-    console.warn('Update user account role fallback:', e)
-  }
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('accounts')
+    .update({ role: newRole })
+    .eq('id', userId)
 
-  if (typeof window !== 'undefined') {
-    const stored = localStorage.getItem(LOCAL_STORAGE_KEY_SESSION)
-    if (stored) {
-      try {
-        const user: UserAccount = JSON.parse(stored)
-        if (user.id === userId) {
-          user.role = newRole
-          localStorage.setItem(LOCAL_STORAGE_KEY_SESSION, JSON.stringify(user))
-        }
-      } catch (e) {
-        console.error(e)
-      }
-    }
+  if (error) {
+    throw new Error(error.message || '권한 변경에 실패했습니다.')
   }
 }
 
