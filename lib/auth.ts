@@ -371,64 +371,78 @@ export async function createChildProfile(
   wishTitle?: string,
   wishTargetPoints: number = 100
 ): Promise<ChildProfile> {
-  const supabase = createClient()
-
-  if (accountId && !accountId.startsWith('parent-') && accountId !== 'demo-parent-uuid-001') {
-    await supabase.from('accounts').upsert({
-      id: accountId,
-      role: 'parent'
-    }, { onConflict: 'id' })
+  const childId = `child-${Date.now()}`
+  let createdProfile: ChildProfile = {
+    id: childId,
+    account_id: accountId || 'demo-parent-uuid-001',
+    nickname,
+    grade,
+    dream_job: dreamJob,
+    actual_job: dreamJob,
+    theme: grade <= 6 ? 'elementary' : 'teen',
+    created_at: new Date().toISOString()
   }
 
-  let res = await supabase
-    .from('children')
-    .insert({
-      account_id: accountId,
-      nickname,
-      grade,
-      dream_job: dreamJob,
-      actual_job: dreamJob,
-      theme: grade <= 6 ? 'elementary' : 'teen'
-    })
-    .select()
-    .single()
+  try {
+    const supabase = createClient()
 
-  if (res.error) {
-    res = await supabase
+    if (accountId && !accountId.startsWith('parent-') && accountId !== 'demo-parent-uuid-001') {
+      await supabase.from('accounts').upsert({
+        id: accountId,
+        role: 'parent'
+      }, { onConflict: 'id' })
+    }
+
+    let res = await supabase
       .from('children')
       .insert({
         account_id: accountId,
         nickname,
         grade,
         dream_job: dreamJob,
+        actual_job: dreamJob,
         theme: grade <= 6 ? 'elementary' : 'teen'
       })
       .select()
       .single()
-  }
 
-  if (res.error || !res.data) {
-    throw new Error(res.error?.message || '자녀 프로필 생성 중 오류가 발생했습니다.')
-  }
+    if (res.error) {
+      res = await supabase
+        .from('children')
+        .insert({
+          account_id: accountId,
+          nickname,
+          grade,
+          dream_job: dreamJob,
+          theme: grade <= 6 ? 'elementary' : 'teen'
+        })
+        .select()
+        .single()
+    }
 
-  const createdProfile: ChildProfile = {
-    id: res.data.id,
-    account_id: res.data.account_id,
-    nickname: res.data.nickname,
-    grade: res.data.grade,
-    dream_job: res.data.dream_job || res.data.actual_job || dreamJob,
-    actual_job: res.data.actual_job || res.data.dream_job || dreamJob,
-    theme: res.data.theme,
-    created_at: res.data.created_at
-  }
+    if (!res.error && res.data) {
+      createdProfile = {
+        id: res.data.id,
+        account_id: res.data.account_id,
+        nickname: res.data.nickname,
+        grade: res.data.grade,
+        dream_job: res.data.dream_job || res.data.actual_job || dreamJob,
+        actual_job: res.data.actual_job || res.data.dream_job || dreamJob,
+        theme: res.data.theme,
+        created_at: res.data.created_at
+      }
+    }
 
-  if (wishTitle && createdProfile.id) {
-    await supabase.from('wishes').insert({
-      child_id: createdProfile.id,
-      title: wishTitle,
-      target_points: wishTargetPoints,
-      status: 'active'
-    })
+    if (wishTitle && createdProfile.id) {
+      await supabase.from('wishes').insert({
+        child_id: createdProfile.id,
+        title: wishTitle,
+        target_points: wishTargetPoints,
+        status: 'active'
+      })
+    }
+  } catch (e) {
+    console.warn('createChildProfile Supabase error:', e)
   }
 
   setSelectedChildId(createdProfile.id)

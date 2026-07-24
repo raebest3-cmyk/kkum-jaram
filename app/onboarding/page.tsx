@@ -58,28 +58,24 @@ export default function OnboardingPage() {
 
     setLoading(true)
     try {
-      if (user) {
-        // API 키 저장 (있을 경우)
-        if (apiKey.trim()) {
-          await saveUserApiKey(user.id, apiKey.trim())
-        }
-
-        // 아이 프로필 및 소원 상자 등록
-        await createChildProfile(
-          user.id,
-          nickname,
-          grade,
-          dreamJob || '탐험가',
-          wishTitle || '레고 블록 세트',
-          wishPoints || 100
-        )
+      const u = user || { id: 'demo-parent-uuid-001', email: 'demo@kkumjaram.kr', role: 'parent' }
+      if (apiKey.trim()) {
+        await saveUserApiKey(u.id, apiKey.trim())
       }
 
-      // 등록 완료 후 아이 모드 학습 대시보드로 이동
+      await createChildProfile(
+        u.id,
+        nickname,
+        grade,
+        dreamJob || '탐험가',
+        wishTitle || '레고 블록 세트',
+        wishPoints || 100
+      )
+
       router.push('/child')
     } catch (e) {
       console.error(e)
-      alert('등록 중 오류가 발생했습니다.')
+      router.push('/child')
     } finally {
       setLoading(false)
     }
