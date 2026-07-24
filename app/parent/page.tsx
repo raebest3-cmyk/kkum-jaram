@@ -118,14 +118,12 @@ export default function ParentDashboardPage() {
   useEffect(() => {
     async function loadData() {
       const u = await getCurrentUser()
-      const currentAcc = u || {
-        id: 'demo-parent-uuid-001',
-        email: 'demo-parent@kkumjaram.kr',
-        display_name: '체험 학부모',
-        role: 'parent'
+      if (!u) {
+        router.push('/login')
+        return
       }
-      setUser(currentAcc)
-      await reloadChildren(currentAcc.id)
+      setUser(u)
+      await reloadChildren(u.id)
 
       const key = getUserApiKey()
       setHasApiKey(!!key)

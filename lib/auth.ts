@@ -323,22 +323,18 @@ export async function logoutUser() {
   }
 }
 
-// Supabase Auth 기반 children 프로필 Strict 조회 + Smart Auto-Seed
+// Supabase Auth 기반 자녀 프로필 초고속 직통 조회
 export async function fetchChildrenProfiles(accountId: string): Promise<ChildProfile[]> {
   if (!accountId) return []
   const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  const targetAccountId = user ? user.id : accountId
-
-  if (!targetAccountId) return []
 
   const { data, error } = await supabase
     .from('children')
     .select('*')
-    .eq('account_id', targetAccountId)
+    .eq('account_id', accountId)
     .order('created_at', { ascending: false })
 
-  if (!error && data && data.length > 0) {
+  if (!error && data) {
     return data.map((item: any) => ({
       id: item.id,
       account_id: item.account_id,
@@ -350,16 +346,6 @@ export async function fetchChildrenProfiles(accountId: string): Promise<ChildPro
       created_at: item.created_at
     }))
   }
-
-  // 자녀 데이터가 0개일 경우, 사용자 편의를 위한 초기 시드 프로필 자동 보장 생성
-  try {
-    const seed1 = await createChildProfile(targetAccountId, '민우', 3, '우주비행사 🚀', '레고 우주탐사선 🚀', 300)
-    const seed2 = await createChildProfile(targetAccountId, '서연', 5, '로봇공학자 🤖', '스마트 코딩 드론 🚁', 500)
-    return [seed1, seed2]
-  } catch (e) {
-    console.warn('Auto seed children error:', e)
-  }
-
   return []
 }
 
@@ -610,31 +596,17 @@ export async function addPointsLedger(childId: string, delta: number, reason: st
 }
 
 export async function fetchWishes(childId: string): Promise<WishItem[]> {
+  if (!childId) return []
   const supabase = createClient()
   const { data, error } = await supabase
     .from('wishes')
     .select('*')
     .eq('child_id', childId)
 
-  if (!error && data && data.length > 0) {
+  if (!error && data) {
     return data
   }
-
-  // 소원이 없을 경우 기본 활성 소원 선물 자동 생성 보장
-  try {
-    const defaultWish: WishItem = {
-      child_id: childId,
-      title: '레고 우주탐사선 세트 🚀',
-      target_points: 300,
-      status: 'active'
-    }
-    const { data: inserted } = await supabase.from('wishes').insert(defaultWish).select().single()
-    if (inserted) return [inserted]
-  } catch (e) {
-    console.warn('Auto seed wish error:', e)
-  }
-
-  return [{ child_id: childId, title: '레고 우주탐사선 세트 🚀', target_points: 300, status: 'active' }]
+  return []
 }
 
 export async function fetchAchievedWishes(childId: string): Promise<WishItem[]> {

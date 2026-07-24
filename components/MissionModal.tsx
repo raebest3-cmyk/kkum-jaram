@@ -95,8 +95,8 @@ export default function MissionModal({ questions, childName, onClose }: MissionM
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
-      <div className="w-full max-w-2xl bg-[#FDFBF7] rounded-3xl border-2 border-amber-300 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+      <div className="w-full max-w-2xl bg-white rounded-3xl border-4 border-amber-300 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-slate-900">
         {/* 파스텔 헤더 */}
         <div className="bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-200 text-amber-950 px-6 py-4 flex justify-between items-center border-b border-amber-300 shadow-sm">
           <div className="flex items-center gap-3">
@@ -114,6 +114,10 @@ export default function MissionModal({ questions, childName, onClose }: MissionM
           </div>
 
           <div className="flex items-center gap-3">
+            <div className="bg-rose-500 text-white font-black text-xs px-3.5 py-1.5 rounded-full shadow-md animate-bounce flex items-center gap-1">
+              <span>⏱️ 타이머</span>
+              <span className="text-sm font-extrabold">{timeLeft}초</span>
+            </div>
             <span className="text-xs bg-amber-400/80 text-amber-950 px-3 py-1.5 rounded-full font-black shadow-sm">
               문제 {currentIndex + 1} / {questions.length}
             </span>
@@ -127,21 +131,21 @@ export default function MissionModal({ questions, childName, onClose }: MissionM
         </div>
 
         {/* ⏱️ 시각적 제한시간 타이머 & Progress Bar */}
-        <div className="bg-amber-50/80 px-6 py-2 border-b border-amber-200 flex flex-col gap-1">
+        <div className="bg-amber-50/80 px-6 py-3 border-b border-amber-200 flex flex-col gap-1.5">
           <div className="flex justify-between items-center text-xs font-black">
-            <span className="text-slate-600 flex items-center gap-1">
-              <span>⏱️ 제한시간</span>
-              <span className={timeLeft <= 15 ? 'text-rose-600 font-black' : 'text-slate-800'}>
-                ({timeLeft}초)
+            <span className="text-slate-800 font-extrabold flex items-center gap-1.5">
+              <span>⏱️ 남은 시간:</span>
+              <span className={timeLeft <= 15 ? 'text-rose-600 font-black text-sm animate-pulse' : 'text-slate-900 font-black text-sm'}>
+                {timeLeft}초
               </span>
             </span>
-            <span className="text-amber-800 text-[11px]">
+            <span className="text-amber-900 text-xs font-extrabold bg-amber-200/80 px-2.5 py-0.5 rounded-md border border-amber-300">
               {timeLeft > 30 ? '여유있게 풀어보세요 😊' : timeLeft > 15 ? '조금 서둘러 주세요! ⚡' : '시간이 얼마 남지 않았어요! 🔥'}
             </span>
           </div>
 
           {/* 동적 Progress Bar */}
-          <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden p-0.5 border border-slate-300">
+          <div className="w-full bg-slate-200 h-3.5 rounded-full overflow-hidden p-0.5 border border-slate-300 shadow-inner">
             <div
               className={`h-full rounded-full transition-all duration-300 ${getTimerColorClass()}`}
               style={{ width: `${(timeLeft / 60) * 100}%` }}
