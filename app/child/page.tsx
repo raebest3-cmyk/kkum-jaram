@@ -66,25 +66,43 @@ export default function ChildDashboardPage() {
   useEffect(() => {
     async function loadData() {
       const u = await getCurrentUser()
-      if (!u) {
-        router.push('/login')
-        return
+      const currentAcc = u || {
+        id: 'demo-parent-uuid-001',
+        email: 'demo-parent@kkumjaram.kr',
+        display_name: '체험 학부모',
+        role: 'parent'
       }
-      setUser(u)
+      setUser(currentAcc)
 
-      const list = await fetchChildrenProfiles(u.id)
+      let list = await fetchChildrenProfiles(currentAcc.id)
+      if (list.length === 0) {
+        list = [
+          {
+            id: 'demo-child-001',
+            account_id: currentAcc.id,
+            nickname: '민우',
+            grade: 3,
+            dream_job: '우주비행사 🚀',
+            actual_job: '우주비행사 🚀',
+            theme: 'elementary'
+          },
+          {
+            id: 'demo-child-002',
+            account_id: currentAcc.id,
+            nickname: '서연',
+            grade: 5,
+            dream_job: '로봇공학자 🤖',
+            actual_job: '로봇공학자 🤖',
+            theme: 'elementary'
+          }
+        ]
+      }
       setChildrenList(list)
 
-      if (list.length > 0) {
-        const savedId = getSelectedChildId()
-        const found = list.find((c) => c.id === savedId)
-        const selected = found || list[0]
-        await loadTargetChildData(selected)
-      } else {
-        // 등록된 아이 프로필이 없으면 온보딩 페이지로 이동
-        router.push('/onboarding')
-        return
-      }
+      const savedId = getSelectedChildId()
+      const found = list.find((c) => c.id === savedId)
+      const selected = found || list[0]
+      await loadTargetChildData(selected)
 
       if (typeof window !== 'undefined') {
         const stored = localStorage.getItem('kkum_jaram_mastery')
