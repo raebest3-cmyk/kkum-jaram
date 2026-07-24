@@ -1,7 +1,18 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  trailingSlash: false,
+  async rewrites() {
+    return [
+      {
+        source: '/admin/login',
+        destination: '/admin/login',
+      },
+      {
+        source: '/admin',
+        destination: '/admin',
+      },
+    ]
+  },
 };
 
 export default nextConfig;
