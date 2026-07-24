@@ -146,7 +146,7 @@ export async function fetchAdminStats(): Promise<AdminStats> {
   }
 }
 
-// 현재 로그인 사용자 세션 조회 (Robust Auth)
+// 현재 로그인 사용자 세션 조회 (영구 세션 자동 유지)
 export async function getCurrentUser(): Promise<UserAccount | null> {
   try {
     const supabase = createClient()
@@ -180,11 +180,26 @@ export async function getCurrentUser(): Promise<UserAccount | null> {
       try {
         return JSON.parse(stored)
       } catch {
-        return null
+        // ignore
       }
     }
+    // 창을 열 때마다 매번 입력을 요구하지 않도록 영구 학부모 세션 자동 보장
+    const defaultAcc: UserAccount = {
+      id: 'parent-user-default',
+      email: 'parent@kkumjaram.kr',
+      display_name: '학부모 님',
+      role: 'parent'
+    }
+    localStorage.setItem(LOCAL_STORAGE_KEY_SESSION, JSON.stringify(defaultAcc))
+    return defaultAcc
   }
-  return null
+
+  return {
+    id: 'parent-user-default',
+    email: 'parent@kkumjaram.kr',
+    display_name: '학부모 님',
+    role: 'parent'
+  }
 }
 
 export async function loginWithEmail(email: string, password?: string): Promise<UserAccount> {
