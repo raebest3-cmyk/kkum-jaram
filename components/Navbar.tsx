@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import {
   getCurrentUser,
-  getChildrenProfiles,
+  fetchChildrenProfiles,
   getSelectedChildId,
   logoutUser,
   UserAccount,
@@ -23,7 +23,7 @@ export default function Navbar() {
   const refreshChildProfile = (childList: ChildProfile[]) => {
     if (childList.length > 0) {
       const savedId = getSelectedChildId()
-      const found = childList.find((c) => c.id === savedId)
+      const found = childList.find((c: ChildProfile) => c.id === savedId)
       setSelectedChild(found || childList[0])
     } else {
       setSelectedChild(null)
@@ -34,9 +34,11 @@ export default function Navbar() {
     async function loadSession() {
       const u = await getCurrentUser()
       setUser(u)
-      const childList = getChildrenProfiles()
-      setChildren(childList)
-      refreshChildProfile(childList)
+      if (u) {
+        const childList = await fetchChildrenProfiles(u.id)
+        setChildren(childList)
+        refreshChildProfile(childList)
+      }
     }
     loadSession()
 
@@ -47,14 +49,17 @@ export default function Navbar() {
     }
 
     // 전역 자녀 변경 이벤트 핸들러
-    const handleChildChange = (e: any) => {
-      const childList = getChildrenProfiles()
-      setChildren(childList)
+    const handleChildChange = async (e: any) => {
+      const u = await getCurrentUser()
+      if (u) {
+        const childList = await fetchChildrenProfiles(u.id)
+        setChildren(childList)
 
-      const targetId = e?.detail?.childId || getSelectedChildId()
-      if (childList.length > 0) {
-        const found = childList.find((c) => c.id === targetId)
-        setSelectedChild(found || childList[0])
+        const targetId = e?.detail?.childId || getSelectedChildId()
+        if (childList.length > 0) {
+          const found = childList.find((c: ChildProfile) => c.id === targetId)
+          setSelectedChild(found || childList[0])
+        }
       }
     }
 

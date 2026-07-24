@@ -269,35 +269,32 @@ export async function logoutUser() {
 // Supabase Auth 기반 children 프로필 Strict 조회
 export async function fetchChildrenProfiles(accountId: string): Promise<ChildProfile[]> {
   if (!accountId) return []
-  try {
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    const targetAccountId = user ? user.id : accountId
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  const targetAccountId = user ? user.id : accountId
 
-    if (!targetAccountId) return []
+  if (!targetAccountId) return []
 
-    const { data, error } = await supabase
-      .from('children')
-      .select('*')
-      .eq('account_id', targetAccountId)
-      .order('created_at', { ascending: false })
+  const { data, error } = await supabase
+    .from('children')
+    .select('*')
+    .eq('account_id', targetAccountId)
+    .order('created_at', { ascending: false })
 
-    if (!error && data) {
-      return data.map((item: any) => ({
-        id: item.id,
-        account_id: item.account_id,
-        nickname: item.nickname,
-        grade: item.grade,
-        dream_job: item.dream_job || item.actual_job || '꿈나무 🌟',
-        actual_job: item.actual_job || item.dream_job || '꿈나무 🌟',
-        theme: item.theme || (item.grade <= 6 ? 'elementary' : 'teen'),
-        created_at: item.created_at
-      }))
-    }
-  } catch (e) {
-    console.error('Supabase fetch children error:', e)
+  if (error || !data) {
+    return []
   }
-  return []
+
+  return data.map((item: any) => ({
+    id: item.id,
+    account_id: item.account_id,
+    nickname: item.nickname,
+    grade: item.grade,
+    dream_job: item.dream_job || item.actual_job || '꿈나무 🌟',
+    actual_job: item.actual_job || item.dream_job || '꿈나무 🌟',
+    theme: item.theme || (item.grade <= 6 ? 'elementary' : 'teen'),
+    created_at: item.created_at
+  }))
 }
 
 export async function createChildProfile(
@@ -308,105 +305,67 @@ export async function createChildProfile(
   wishTitle?: string,
   wishTargetPoints: number = 100
 ): Promise<ChildProfile> {
-  const childId = `child-${Date.now()}`
-  let createdProfile: ChildProfile = {
-    id: childId,
-    account_id: accountId,
-    nickname,
-    grade,
-    dream_job: dreamJob,
-    actual_job: dreamJob,
-    theme: grade <= 6 ? 'elementary' : 'teen',
-    created_at: new Date().toISOString()
+  const supabase = createClient()
+
+  if (accountId && !accountId.startsWith('parent-') && accountId !== 'demo-parent-uuid-001') {
+    await supabase.from('accounts').upsert({
+      id: accountId,
+      role: 'parent'
+    }, { onConflict: 'id' })
   }
 
-  try {
-    const supabase = createClient()
+  let res = await supabase
+    .from('children')
+    .insert({
+      account_id: accountId,
+      nickname,
+      grade,
+      dream_job: dreamJob,
+      actual_job: dreamJob,
+      theme: grade <= 6 ? 'elementary' : 'teen'
+    })
+    .select()
+    .single()
 
-    if (accountId && !accountId.startsWith('parent-') && accountId !== 'demo-parent-uuid-001') {
-      await supabase.from('accounts').upsert({
-        id: accountId,
-        role: 'parent'
-      }, { onConflict: 'id' })
-    }
-
-    let res = await supabase
+  if (res.error) {
+    res = await supabase
       .from('children')
       .insert({
         account_id: accountId,
         nickname,
         grade,
         dream_job: dreamJob,
-        actual_job: dreamJob,
         theme: grade <= 6 ? 'elementary' : 'teen'
       })
       .select()
       .single()
-
-    if (res.error) {
-      res = await supabase
-        .from('children')
-        .insert({
-          account_id: accountId,
-          nickname,
-          grade,
-          dream_job: dreamJob,
-          theme: grade <= 6 ? 'elementary' : 'teen'
-        })
-        .select()
-        .single()
-    }
-
-    if (!res.error && res.data) {
-      createdProfile = {
-        id: res.data.id,
-        account_id: res.data.account_id,
-        nickname: res.data.nickname,
-        grade: res.data.grade,
-        dream_job: res.data.dream_job || res.data.actual_job || dreamJob,
-        actual_job: res.data.actual_job || res.data.dream_job || dreamJob,
-        theme: res.data.theme,
-        created_at: res.data.created_at
-      }
-    } else if (res.error) {
-      console.warn('Supabase children insert error:', res.error)
-    }
-
-    if (wishTitle && createdProfile.id) {
-      await supabase.from('wishes').insert({
-        child_id: createdProfile.id,
-        title: wishTitle,
-        target_points: wishTargetPoints,
-        status: 'active'
-      })
-    }
-  } catch (e) {
-    console.warn('Children DB insert fallback:', e)
   }
 
-  if (typeof window !== 'undefined') {
-    const existing = getChildrenProfiles()
-    const isAlreadyIn = existing.some(item => item.id === createdProfile.id)
-    if (!isAlreadyIn) {
-      existing.unshift(createdProfile)
-      localStorage.setItem(LOCAL_STORAGE_KEY_CHILDREN, JSON.stringify(existing))
-    }
-
-    if (wishTitle) {
-      const wishes = getLocalWishes()
-      wishes.unshift({
-        id: `wish-${Date.now()}`,
-        child_id: createdProfile.id,
-        title: wishTitle,
-        target_points: wishTargetPoints,
-        status: 'active'
-      })
-      localStorage.setItem(LOCAL_STORAGE_KEY_WISHES, JSON.stringify(wishes))
-    }
-
-    setSelectedChildId(createdProfile.id)
+  if (res.error || !res.data) {
+    throw new Error(res.error?.message || '자녀 프로필 생성 중 오류가 발생했습니다.')
   }
 
+  const createdProfile: ChildProfile = {
+    id: res.data.id,
+    account_id: res.data.account_id,
+    nickname: res.data.nickname,
+    grade: res.data.grade,
+    dream_job: res.data.dream_job || res.data.actual_job || dreamJob,
+    actual_job: res.data.actual_job || res.data.dream_job || dreamJob,
+    theme: res.data.theme,
+    created_at: res.data.created_at
+  }
+
+  if (wishTitle && createdProfile.id) {
+    await supabase.from('wishes').insert({
+      child_id: createdProfile.id,
+      title: wishTitle,
+      target_points: wishTargetPoints,
+      status: 'active'
+    })
+  }
+
+  setSelectedChildId(createdProfile.id)
   return createdProfile
 }
 
@@ -418,155 +377,79 @@ export async function updateChildProfile(
   wishTitle?: string,
   wishTargetPoints: number = 100
 ): Promise<void> {
-  try {
-    const supabase = createClient()
+  const supabase = createClient()
 
-    let res = await supabase
+  let res = await supabase
+    .from('children')
+    .update({
+      nickname,
+      grade,
+      dream_job: dreamJob,
+      actual_job: dreamJob,
+      theme: grade <= 6 ? 'elementary' : 'teen'
+    })
+    .eq('id', childId)
+
+  if (res.error) {
+    await supabase
       .from('children')
       .update({
         nickname,
         grade,
         dream_job: dreamJob,
-        actual_job: dreamJob,
         theme: grade <= 6 ? 'elementary' : 'teen'
       })
       .eq('id', childId)
+  }
 
-    if (res.error) {
+  if (wishTitle) {
+    const { data: existingWishes } = await supabase
+      .from('wishes')
+      .select('*')
+      .eq('child_id', childId)
+      .eq('status', 'active')
+
+    if (existingWishes && existingWishes.length > 0) {
       await supabase
-        .from('children')
-        .update({
-          nickname,
-          grade,
-          dream_job: dreamJob,
-          theme: grade <= 6 ? 'elementary' : 'teen'
-        })
-        .eq('id', childId)
-    }
-
-    if (wishTitle) {
-      const { data: existingWishes } = await supabase
         .from('wishes')
-        .select('*')
-        .eq('child_id', childId)
-        .eq('status', 'active')
-
-      if (existingWishes && existingWishes.length > 0) {
-        await supabase
-          .from('wishes')
-          .update({
-            title: wishTitle,
-            target_points: wishTargetPoints
-          })
-          .eq('id', existingWishes[0].id)
-      } else {
-        await supabase.from('wishes').insert({
-          child_id: childId,
+        .update({
           title: wishTitle,
-          target_points: wishTargetPoints,
-          status: 'active'
+          target_points: wishTargetPoints
         })
-      }
+        .eq('id', existingWishes[0].id)
+    } else {
+      await supabase.from('wishes').insert({
+        child_id: childId,
+        title: wishTitle,
+        target_points: wishTargetPoints,
+        status: 'active'
+      })
     }
-  } catch (e) {
-    console.warn('Update child profile fallback:', e)
   }
 
   if (typeof window !== 'undefined') {
-    const existing = getChildrenProfiles()
-    const updated = existing.map((item) =>
-      item.id === childId
-        ? {
-            ...item,
-            nickname,
-            grade,
-            dream_job: dreamJob,
-            actual_job: dreamJob,
-            theme: grade <= 6 ? 'elementary' : 'teen'
-          }
-        : item
-    )
-    localStorage.setItem(LOCAL_STORAGE_KEY_CHILDREN, JSON.stringify(updated))
-
-    if (wishTitle) {
-      const wishes = getLocalWishes()
-      const wishIdx = wishes.findIndex((w) => w.child_id === childId && w.status === 'active')
-      if (wishIdx >= 0) {
-        wishes[wishIdx].title = wishTitle
-        wishes[wishIdx].target_points = wishTargetPoints
-      } else {
-        wishes.unshift({
-          id: `wish-${Date.now()}`,
-          child_id: childId,
-          title: wishTitle,
-          target_points: wishTargetPoints,
-          status: 'active'
-        })
-      }
-      localStorage.setItem(LOCAL_STORAGE_KEY_WISHES, JSON.stringify(wishes))
-    }
-
     window.dispatchEvent(new CustomEvent('kkum_jaram_child_changed', { detail: { childId } }))
   }
 }
 
 export async function deleteChildProfile(childId: string): Promise<void> {
-  try {
-    const supabase = createClient()
-    await supabase.from('children').delete().eq('id', childId)
-  } catch (e) {
-    console.warn('Delete child profile fallback:', e)
+  const supabase = createClient()
+  const { error } = await supabase.from('children').delete().eq('id', childId)
+  if (error) {
+    throw new Error(error.message || '자녀 프로필 삭제 실패')
   }
-
-  if (typeof window !== 'undefined') {
-    const existing = getChildrenProfiles()
-    const filtered = existing.filter((item) => item.id !== childId)
-    localStorage.setItem(LOCAL_STORAGE_KEY_CHILDREN, JSON.stringify(filtered))
-
-    const wishes = getLocalWishes()
-    const filteredWishes = wishes.filter((w) => w.child_id !== childId)
-    localStorage.setItem(LOCAL_STORAGE_KEY_WISHES, JSON.stringify(filteredWishes))
-
-    if (getSelectedChildId() === childId && filtered.length > 0) {
-      setSelectedChildId(filtered[0].id)
-    }
-  }
-}
-
-export function getChildrenProfiles(): ChildProfile[] {
-  if (typeof window === 'undefined') return []
-  const stored = localStorage.getItem(LOCAL_STORAGE_KEY_CHILDREN)
-  if (stored) {
-    try {
-      return JSON.parse(stored)
-    } catch {
-      return []
-    }
-  }
-  return []
 }
 
 export async function fetchChildPoints(childId: string): Promise<number> {
-  try {
-    const supabase = createClient()
-    const { data, error } = await supabase
-      .from('points_ledger')
-      .select('delta')
-      .eq('child_id', childId)
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('points_ledger')
+    .select('delta')
+    .eq('child_id', childId)
 
-    if (!error && data) {
-      const sum = data.reduce((acc: number, cur: any) => acc + (cur.delta || 0), 0)
-      return Math.max(120, sum)
-    }
-  } catch (e) {
-    console.warn('Fetch points ledger fallback:', e)
-  }
-
-  if (typeof window !== 'undefined') {
-    const stored = localStorage.getItem(`${LOCAL_STORAGE_KEY_POINTS}_${childId}`)
-    if (stored) {
-      return Number(stored) || 120
-    }
+  if (!error && data) {
+    const sum = data.reduce((acc: number, cur: any) => acc + (cur.delta || 0), 0)
+    return Math.max(120, sum)
   }
   return 120
 }
@@ -577,32 +460,27 @@ export async function fetchChildQuizStats(childId: string, grade: number = 3): P
   let totalCorrect = 0
   let totalAttempts = 0
 
-  try {
-    const supabase = createClient()
+  const supabase = createClient()
+  const { data: attemptsData } = await supabase
+    .from('attempts')
+    .select('*')
+    .eq('child_id', childId)
 
-    const { data: attemptsData } = await supabase
-      .from('attempts')
+  if (attemptsData && attemptsData.length > 0) {
+    totalAttempts = attemptsData.length
+    totalCorrect = attemptsData.filter((a: any) => a.is_correct).length
+    weeklyQuestions = totalAttempts
+    accuracyRate = Math.round((totalCorrect / Math.max(1, totalAttempts)) * 100)
+  } else {
+    const { data: ledgerData } = await supabase
+      .from('points_ledger')
       .select('*')
       .eq('child_id', childId)
 
-    if (attemptsData && attemptsData.length > 0) {
-      totalAttempts = attemptsData.length
-      totalCorrect = attemptsData.filter((a: any) => a.is_correct).length
-      weeklyQuestions = totalAttempts
-      accuracyRate = Math.round((totalCorrect / Math.max(1, totalAttempts)) * 100)
-    } else {
-      const { data: ledgerData } = await supabase
-        .from('points_ledger')
-        .select('*')
-        .eq('child_id', childId)
-
-      if (ledgerData && ledgerData.length > 0) {
-        weeklyQuestions = Math.min(100, ledgerData.length * 10)
-        accuracyRate = 85
-      }
+    if (ledgerData && ledgerData.length > 0) {
+      weeklyQuestions = Math.min(100, ledgerData.length * 10)
+      accuracyRate = 85
     }
-  } catch (e) {
-    console.warn('Fetch child quiz stats fallback:', e)
   }
 
   const getGradeUnits = (g: number) => {
@@ -640,62 +518,43 @@ export async function fetchChildQuizStats(childId: string, grade: number = 3): P
 }
 
 export async function addPointsLedger(childId: string, delta: number, reason: string): Promise<number> {
-  try {
-    const supabase = createClient()
-    await supabase.from('points_ledger').insert({
-      child_id: childId,
-      delta,
-      reason
-    })
-  } catch (e) {
-    console.warn('Add points ledger fallback:', e)
-  }
+  const supabase = createClient()
+  await supabase.from('points_ledger').insert({
+    child_id: childId,
+    delta,
+    reason
+  })
 
-  const current = await fetchChildPoints(childId)
-  const newTotal = current + delta
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(`${LOCAL_STORAGE_KEY_POINTS}_${childId}`, String(newTotal))
-  }
+  const newTotal = await fetchChildPoints(childId)
   return newTotal
 }
 
 export async function fetchWishes(childId: string): Promise<WishItem[]> {
-  try {
-    const supabase = createClient()
-    const { data, error } = await supabase
-      .from('wishes')
-      .select('*')
-      .eq('child_id', childId)
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('wishes')
+    .select('*')
+    .eq('child_id', childId)
 
-    if (!error && data && data.length > 0) {
-      return data
-    }
-  } catch (e) {
-    console.warn('Fetch wishes fallback:', e)
+  if (!error && data) {
+    return data
   }
-
-  return getLocalWishes()
+  return []
 }
 
 export async function fetchAchievedWishes(childId: string): Promise<WishItem[]> {
-  try {
-    const supabase = createClient()
-    const { data, error } = await supabase
-      .from('wishes')
-      .select('*')
-      .eq('child_id', childId)
-      .eq('status', 'achieved')
-      .order('achieved_at', { ascending: false })
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('wishes')
+    .select('*')
+    .eq('child_id', childId)
+    .eq('status', 'achieved')
+    .order('achieved_at', { ascending: false })
 
-    if (!error && data && data.length > 0) {
-      return data
-    }
-  } catch (e) {
-    console.warn('Fetch achieved wishes fallback:', e)
+  if (!error && data) {
+    return data
   }
-
-  const wishes = getLocalWishes()
-  return wishes.filter((w) => w.child_id === childId && w.status === 'achieved')
+  return []
 }
 
 export async function approveWishAndCreateAlbum(
@@ -708,48 +567,27 @@ export async function approveWishAndCreateAlbum(
 ): Promise<number> {
   await addPointsLedger(childId, -deductPoints, `소원 선물 승인 차감 (${redemptionType})`)
 
-  try {
-    const supabase = createClient()
-    let res = await supabase
+  const supabase = createClient()
+  let res = await supabase
+    .from('wishes')
+    .update({
+      status: 'achieved',
+      proof_image_path: proofImageDataUrl || null,
+      parent_message: parentMessage || null,
+      redemption_type: redemptionType,
+      achieved_at: new Date().toISOString()
+    })
+    .eq('id', wishId)
+
+  if (res.error) {
+    await supabase
       .from('wishes')
       .update({
         status: 'achieved',
         proof_image_path: proofImageDataUrl || null,
-        parent_message: parentMessage || null,
-        redemption_type: redemptionType,
         achieved_at: new Date().toISOString()
       })
       .eq('id', wishId)
-
-    if (res.error) {
-      await supabase
-        .from('wishes')
-        .update({
-          status: 'achieved',
-          proof_image_path: proofImageDataUrl || null,
-          achieved_at: new Date().toISOString()
-        })
-        .eq('id', wishId)
-    }
-  } catch (e) {
-    console.warn('Approve wish & album fallback:', e)
-  }
-
-  if (typeof window !== 'undefined') {
-    const wishes = getLocalWishes()
-    const updated = wishes.map((w) =>
-      w.id === wishId || (w.child_id === childId && w.status === 'active')
-        ? {
-            ...w,
-            status: 'achieved',
-            proof_image_path: proofImageDataUrl || w.proof_image_path,
-            parent_message: parentMessage,
-            redemption_type: redemptionType,
-            achieved_at: new Date().toISOString()
-          }
-        : w
-    )
-    localStorage.setItem(LOCAL_STORAGE_KEY_WISHES, JSON.stringify(updated))
   }
 
   const newPoints = await fetchChildPoints(childId)
@@ -757,50 +595,23 @@ export async function approveWishAndCreateAlbum(
 }
 
 export async function updateWishStatus(wishId: string, status: 'active' | 'achieved'): Promise<void> {
-  try {
-    const supabase = createClient()
-    await supabase
-      .from('wishes')
-      .update({
-        status,
-        achieved_at: status === 'achieved' ? new Date().toISOString() : null
-      })
-      .eq('id', wishId)
-  } catch (e) {
-    console.warn('Update wish status fallback:', e)
-  }
-
-  if (typeof window !== 'undefined') {
-    const wishes = getLocalWishes()
-    const updated = wishes.map((w) => (w.id === wishId ? { ...w, status } : w))
-    localStorage.setItem(LOCAL_STORAGE_KEY_WISHES, JSON.stringify(updated))
-  }
-}
-
-function getLocalWishes(): WishItem[] {
-  if (typeof window === 'undefined') return []
-  const stored = localStorage.getItem(LOCAL_STORAGE_KEY_WISHES)
-  if (stored) {
-    try {
-      return JSON.parse(stored)
-    } catch {
-      return []
-    }
-  }
-  return []
+  const supabase = createClient()
+  await supabase
+    .from('wishes')
+    .update({
+      status,
+      achieved_at: status === 'achieved' ? new Date().toISOString() : null
+    })
+    .eq('id', wishId)
 }
 
 export async function saveUserApiKey(accountId: string, apiKey: string) {
-  try {
-    const supabase = createClient()
-    await supabase.from('user_secrets').upsert({
-      account_id: accountId,
-      anthropic_key_encrypted: apiKey,
-      updated_at: new Date().toISOString()
-    })
-  } catch (e) {
-    console.warn('API key save fallback:', e)
-  }
+  const supabase = createClient()
+  await supabase.from('user_secrets').upsert({
+    account_id: accountId,
+    anthropic_key_encrypted: apiKey,
+    updated_at: new Date().toISOString()
+  })
 
   if (typeof window !== 'undefined') {
     localStorage.setItem(LOCAL_STORAGE_KEY_SECRETS, apiKey)

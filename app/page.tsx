@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
-import { getCurrentUser, getChildrenProfiles, UserAccount, ChildProfile } from '@/lib/auth'
+import { getCurrentUser, fetchChildrenProfiles, UserAccount, ChildProfile } from '@/lib/auth'
 
 export default function Home() {
   const router = useRouter()
@@ -16,8 +16,10 @@ export default function Home() {
     async function checkUser() {
       const u = await getCurrentUser()
       setUser(u)
-      const childList = getChildrenProfiles()
-      setChildren(childList)
+      if (u) {
+        const childList = await fetchChildrenProfiles(u.id)
+        setChildren(childList)
+      }
       setLoading(false)
     }
     checkUser()
